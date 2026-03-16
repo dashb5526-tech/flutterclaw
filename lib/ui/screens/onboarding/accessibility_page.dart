@@ -39,10 +39,20 @@ class _AccessibilityPageState extends State<AccessibilityPage>
     super.dispose();
   }
 
-  // Re-check when the user returns from the Settings app.
+  // Re-check when the user returns from the Settings app. Use a short delay so
+  // the system has time to update the accessibility list; then re-check again
+  // once more in case the list updates asynchronously.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkPermission();
+    if (state != AppLifecycleState.resumed) return;
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      _checkPermission();
+    });
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (!mounted) return;
+      _checkPermission();
+    });
   }
 
   Future<void> _checkPermission() async {

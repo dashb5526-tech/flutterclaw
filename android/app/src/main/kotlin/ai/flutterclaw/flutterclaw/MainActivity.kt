@@ -1,5 +1,7 @@
 package ai.flutterclaw.flutterclaw
 
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
@@ -7,7 +9,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Base64
+import android.view.accessibility.AccessibilityManager
 import android.view.PixelCopy
+import android.accessibilityservice.AccessibilityServiceInfo
 import com.pravera.flutter_foreground_task.FlutterForegroundTaskPlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -52,7 +56,7 @@ class MainActivity : FlutterActivity() {
     // ─── Permission ───────────────────────────────────────────────────────────
 
     private fun handleCheckPermission(result: MethodChannel.Result) {
-        val granted = FlutterClawAccessibilityService.isRunning() && isAccessibilityServiceEnabled()
+        val granted = isAccessibilityServiceEnabled()
         result.success(mapOf("granted" to granted, "platform" to "android"))
     }
 
@@ -218,11 +222,26 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
-        val serviceName = "$packageName/.FlutterClawAccessibilityService"
+        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
+        val enabledList = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        val ourComponent = ComponentName(this, FlutterClawAccessibilityService::class.java)
+        for (info in enabledList) {
+            val component = info.resolveInfo?.serviceInfo?.let {
+                ComponentName(it.packageName, it.name)
+            } ?: continue
+            if (component == ourComponent) return true
+        }
+        // Fallback: check raw setting (format can be "pkg/.Service" or "pkg/pkg.Service")
         val enabledServices = Settings.Secure.getString(
             contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
         ) ?: return false
-        return enabledServices.split(':').any { it.equals(serviceName, ignoreCase = true) }
+        val flat = ourComponent.flattenToString()
+        val shortName = "$packageName/.FlutterClawAccessibilityService"
+        return enabledServices.split(':').any {
+            it.equals(flat, ignoreCase = true) ||
+                it.equals(shortName, ignoreCase = true) ||
+                it.contains("FlutterClawAccessibilityService", ignoreCase = true) && it.startsWith("$packageName/")
+        }
     }
 }
