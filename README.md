@@ -8,8 +8,15 @@ Standalone AI assistant for Android and iOS — the full [OpenClaw](https://gith
 
 ---
 
+## Disclaimer
+
+FlutterClaw is currently in **early alpha**. This release is experimental: you may run into bugs, crashes, or unexpected behavior. The project is under **continuous iteration** and changes frequently—we're improving it day by day. If you hit an issue, please report it in the [GitHub Issues](https://github.com/flutterclaw/flutterclaw/issues) section; if you have a fix or improvement, a **pull request** is even better. Thank you for trying FlutterClaw and for your patience as we shape it.
+
+---
+
 ## Table of contents
 
+- [Disclaimer](#disclaimer)
 - [Screenshots](#screenshots)
 - [Features](#features)
 - [Roadmap](#roadmap)
@@ -20,6 +27,7 @@ Standalone AI assistant for Android and iOS — the full [OpenClaw](https://gith
 - [Architecture](#architecture)
 - [Supported LLM Providers](#supported-llm-providers)
 - [Tools](#tools)
+- [Security](#security)
 - [Contact](#contact)
 - [License](#license)
 
@@ -261,6 +269,12 @@ OpenRouter stealth models (e.g. Healer Alpha, Hunter Alpha) are supported via th
 Agents have access to 45+ tools in categories: file system, web, memory, agent management, sessions & subagents, messaging, device (status, notifications, clipboard, share), camera & media, contacts/calendar/location, health, UI automation & shortcuts, and scheduling.
 
 **[Full tools reference →](docs/tools.md)**
+
+---
+
+## Security
+
+This repository contains **no secrets, API keys, or credentials**. It is safe to make the repo public. All sensitive data (LLM API keys, ClawHub token, Telegram/Discord bot tokens, web search API keys) are entered by the user in the app and stored only on the device: API keys and the ClawHub token use the platform keychain (Flutter Secure Storage); channel and tool settings are stored in the app’s config directory (outside the repo). Do not commit `.env` files, `google-services.json`, `GoogleService-Info.plist`, or keystores—they are already listed in `.gitignore`. If you use CI (e.g. GitHub Actions), use the platform’s secrets (e.g. GitHub Secrets) and pass them as environment variables; do not put keys in the repository.
 
 ---
 
