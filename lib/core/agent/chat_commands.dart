@@ -6,6 +6,7 @@ library;
 import 'package:flutterclaw/core/agent/agent_loop.dart';
 import 'package:flutterclaw/core/agent/session_manager.dart';
 import 'package:flutterclaw/data/models/config.dart';
+import 'package:flutterclaw/services/sandbox_service.dart';
 
 class ChatCommandResult {
   final bool handled;
@@ -20,11 +21,13 @@ class ChatCommandHandler {
   final SessionManager sessionManager;
   final ConfigManager configManager;
   final AgentLoop agentLoop;
+  final SandboxService sandboxService;
 
   ChatCommandHandler({
     required this.sessionManager,
     required this.configManager,
     required this.agentLoop,
+    required this.sandboxService,
   });
 
   Future<ChatCommandResult> handle(String sessionKey, String message) async {
@@ -50,6 +53,8 @@ class ChatCommandHandler {
         return _handleVerbose(args);
       case '/usage':
         return _handleUsage(args);
+      case '/sh':
+        return _handleShell(args);
       case '/help':
         return _handleHelp();
       default:
@@ -154,6 +159,80 @@ class ChatCommandHandler {
     );
   }
 
+  Future<ChatCommandResult> _handleShell(List<String> args) async {
+    if (args.isEmpty) {
+      return const ChatCommandResult(
+        handled: true,
+        response: '**Usage:** `/sh <command>`\n\n'
+            'Runs a command in the Alpine Linux sandbox.\n'
+            'Example: `/sh uname -a`',
+      );
+    }
+
+    final command = args.join(' ');
+
+    // Check if sandbox is ready
+    final status = await sandboxService.status();
+    if (status['error'] == true) {
+      return ChatCommandResult(
+        handled: true,
+        response: '❌ Sandbox error: ${status['message']}',
+      );
+    }
+
+    // Auto-provision if needed
+    if (status['ready'] != true) {
+      final setup = await sandboxService.setup();
+      if (setup['error'] == true) {
+        return ChatCommandResult(
+          handled: true,
+          response: '❌ Setup failed: ${setup['message']}',
+        );
+      }
+    }
+
+    // Execute the command
+    final result = await sandboxService.exec(
+      command: command,
+      timeoutMs: 30000,
+    );
+
+    if (result['error'] == true) {
+      return ChatCommandResult(
+        handled: true,
+        response: '❌ Execution failed: ${result['message']}',
+      );
+    }
+
+    final exitCode = result['exit_code'] ?? -1;
+    final stdout = (result['stdout'] as String?) ?? '';
+    final stderr = (result['stderr'] as String?) ?? '';
+    final timedOut = result['timed_out'] == true;
+
+    if (timedOut) {
+      return const ChatCommandResult(
+        handled: true,
+        response: '⏱️ Command timed out (>30s).',
+      );
+    }
+
+    final output = StringBuffer();
+    output.writeln('```');
+    output.writeln('\$ $command');
+    if (stdout.isNotEmpty) output.write(stdout);
+    if (stderr.isNotEmpty) {
+      if (stdout.isNotEmpty) output.writeln();
+      output.write(stderr);
+    }
+    output.writeln('```');
+    output.write('\nExit code: $exitCode');
+
+    return ChatCommandResult(
+      handled: true,
+      response: output.toString(),
+    );
+  }
+
   ChatCommandResult _handleHelp() {
     return const ChatCommandResult(
       handled: true,
@@ -165,6 +244,7 @@ class ChatCommandHandler {
           '- `/think <level>` -- off|low|medium|high\n'
           '- `/verbose on|off` -- toggle verbose mode\n'
           '- `/usage off|tokens|full` -- usage footer mode\n'
+          '- `/sh <command>` -- run command in Alpine sandbox\n'
           '- `/help` -- show this help',
     );
   }
