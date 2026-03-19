@@ -32,6 +32,10 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
   bool _restartPending = false;
   bool _requiresRelink = false;
 
+  /// True when the adapter was started by this screen (not already running).
+  /// Used to stop it on dispose if the user exits without connecting.
+  bool _startedByScreen = false;
+
   @override
   void initState() {
     super.initState();
@@ -40,10 +44,20 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
     _selfChatMode = config.selfChatMode ?? true;
     _loadApprovedDevices();
     _attachToAdapter();
+    // If no adapter is running, auto-start to show QR immediately.
+    if (_adapter == null) {
+      _startedByScreen = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startAdapter());
+    }
   }
 
   @override
   void dispose() {
+    // If we started the adapter just for QR and user left without connecting,
+    // clean it up so it doesn't consume resources in the background.
+    if (_startedByScreen && _connStatus != WAConnectionStatus.connected) {
+      _stopActiveAdapter(); // fire-and-forget
+    }
     _qrSub?.cancel();
     _connSub?.cancel();
     super.dispose();
@@ -59,10 +73,15 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
     _connStatus = adapter.connectionStatus;
     _restartPending = adapter.isRestartPending;
     _requiresRelink = adapter.requiresRelink;
-    // Show the cached QR immediately if it was emitted before this screen opened.
     if (adapter.lastQrCode != null) {
       _qrCode = adapter.lastQrCode;
     }
+    _listenToAdapter(adapter);
+  }
+
+  void _listenToAdapter(WhatsAppChannelAdapter adapter) {
+    _qrSub?.cancel();
+    _connSub?.cancel();
     _qrSub = adapter.qrStream.listen((qr) {
       if (mounted) setState(() => _qrCode = qr);
     });
@@ -75,10 +94,87 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
           if (s == WAConnectionStatus.connected) {
             _qrCode = null;
             _requiresRelink = false;
+            // Auto-save config when QR is scanned for the first time.
+            if (_startedByScreen) _saveConfig();
           }
         });
       }
     });
+  }
+
+  /// Starts the WhatsApp adapter (creates it + registers + starts).
+  /// Does NOT save config — call _saveConfig() separately when needed.
+  Future<void> _startAdapter({bool clearAuth = false}) async {
+    if (!mounted) return;
+    final configManager = ref.read(configManagerProvider);
+    final currentConfig = configManager.config.channels.whatsapp;
+    final router = ref.read(channelRouterProvider);
+    final pairingService = ref.read(pairingServiceProvider);
+    final cmdHandler = ref.read(chatCommandHandlerProvider);
+    final agentLoop = ref.read(agentLoopProvider);
+
+    await _stopActiveAdapter(clearAuth: clearAuth);
+    if (!mounted) return;
+
+    final adapter = WhatsAppChannelAdapter(
+      authDir: currentConfig.authDir,
+      allowedUserIds: _dmPolicy == 'allowlist'
+          ? _approvedDevices.keys.toList()
+          : [],
+      dmPolicy: _dmPolicy,
+      selfChatMode: _selfChatMode,
+      pairingService: pairingService,
+      chatCommandHandler: (sessionKey, command) async {
+        final result = await cmdHandler.handle(sessionKey, command);
+        return result.handled ? result.response : null;
+      },
+    );
+
+    router.registerAdapter(adapter);
+    _adapter = adapter;
+    _listenToAdapter(adapter);
+
+    await adapter.start((msg) async {
+      final response = await agentLoop.processMessage(
+        msg.sessionKey,
+        msg.text,
+        channelType: msg.channelType,
+        chatId: msg.chatId,
+        contentBlocks: msg.contentBlocks,
+        channelContext: msg.channelContext,
+      );
+      await adapter.sendMessage(
+        OutgoingMessage(
+          channelType: msg.channelType,
+          chatId: msg.chatId,
+          text: response.content,
+        ),
+      );
+    });
+  }
+
+  /// Saves config only (marks WhatsApp as enabled with current settings).
+  Future<void> _saveConfig() async {
+    final configManager = ref.read(configManagerProvider);
+    final currentConfig = configManager.config.channels.whatsapp;
+    configManager.update(
+      configManager.config.copyWith(
+        channels: ChannelsConfig(
+          telegram: configManager.config.channels.telegram,
+          discord: configManager.config.channels.discord,
+          whatsapp: WhatsAppConfig(
+            enabled: true,
+            authDir: currentConfig.authDir,
+            dmPolicy: _dmPolicy,
+            allowFrom: _dmPolicy == 'allowlist'
+                ? _approvedDevices.keys.toList()
+                : [],
+            selfChatMode: _selfChatMode,
+          ),
+        ),
+      ),
+    );
+    await configManager.save();
   }
 
   Future<void> _stopActiveAdapter({bool clearAuth = false}) async {
@@ -156,91 +252,13 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
     }
   }
 
+  /// Save settings and restart the adapter with the updated config.
   Future<void> _save() async {
     setState(() => _isLoading = true);
     try {
-      final configManager = ref.read(configManagerProvider);
-      final currentConfig = configManager.config.channels.whatsapp;
-      configManager.update(
-        configManager.config.copyWith(
-          channels: ChannelsConfig(
-            telegram: configManager.config.channels.telegram,
-            discord: configManager.config.channels.discord,
-            whatsapp: WhatsAppConfig(
-              enabled: true,
-              authDir: currentConfig.authDir,
-              dmPolicy: _dmPolicy,
-              allowFrom: _dmPolicy == 'allowlist'
-                  ? _approvedDevices.keys.toList()
-                  : [],
-              selfChatMode: _selfChatMode,
-            ),
-          ),
-        ),
-      );
-      await configManager.save();
-
-      final router = ref.read(channelRouterProvider);
-      final forceRelink = _requiresRelink;
-      await _stopActiveAdapter(clearAuth: forceRelink);
-
-      final pairingService = ref.read(pairingServiceProvider);
-      final cmdHandler = ref.read(chatCommandHandlerProvider);
-      final agentLoop = ref.read(agentLoopProvider);
-
-      final adapter = WhatsAppChannelAdapter(
-        authDir: currentConfig.authDir,
-        allowedUserIds: _dmPolicy == 'allowlist'
-            ? _approvedDevices.keys.toList()
-            : [],
-        dmPolicy: _dmPolicy,
-        selfChatMode: _selfChatMode,
-        pairingService: pairingService,
-        chatCommandHandler: (sessionKey, command) async {
-          final result = await cmdHandler.handle(sessionKey, command);
-          return result.handled ? result.response : null;
-        },
-      );
-
-      router.registerAdapter(adapter);
-      _adapter = adapter;
-      _qrSub?.cancel();
-      _connSub?.cancel();
-      _qrSub = adapter.qrStream.listen((qr) {
-        if (mounted) setState(() => _qrCode = qr);
-      });
-      _connSub = adapter.connectionStateStream.listen((s) {
-        if (mounted) {
-          setState(() {
-            _connStatus = s;
-            _restartPending = adapter.isRestartPending;
-            _requiresRelink = adapter.requiresRelink;
-            if (s == WAConnectionStatus.connected) {
-              _qrCode = null;
-              _requiresRelink = false;
-            }
-          });
-        }
-      });
-
-      await adapter.start((msg) async {
-        final response = await agentLoop.processMessage(
-          msg.sessionKey,
-          msg.text,
-          channelType: msg.channelType,
-          chatId: msg.chatId,
-          contentBlocks: msg.contentBlocks,
-          channelContext: msg.channelContext,
-        );
-        await adapter.sendMessage(
-          OutgoingMessage(
-            channelType: msg.channelType,
-            chatId: msg.chatId,
-            text: response.content,
-          ),
-        );
-      });
-
+      await _saveConfig();
+      _startedByScreen = false; // Adapter is now intentionally kept running.
+      await _startAdapter(clearAuth: _requiresRelink);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('WhatsApp configuration saved')),
@@ -320,7 +338,9 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Primary action button — always visible near top
+          // Primary action button — always visible near top.
+          // When QR is showing (auto-started), the button applies settings
+          // and restarts the adapter. Once connected, it just saves settings.
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -332,15 +352,15 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(isConnected ? Icons.save_outlined : Icons.link),
+                  : Icon(isConnected ? Icons.save_outlined : Icons.refresh),
               label: Text(
                 _isLoading
-                    ? 'Connecting...'
+                    ? 'Applying...'
                     : _requiresRelink
                     ? 'Reconnect WhatsApp'
                     : isConnected
                     ? 'Save Settings'
-                    : 'Connect WhatsApp',
+                    : 'Apply Settings & Restart',
               ),
             ),
           ),
