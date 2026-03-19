@@ -62,6 +62,7 @@ dependencies:
   smooth_page_indicator: ^1.2.0+3
   url_launcher: ^6.3.1
   flutter_markdown: ^0.7.7
+  markdown: ^7.0.0
   image_picker: ^1.1.2
   file_picker: ^8.1.6
   audio_session: ^0.1.22

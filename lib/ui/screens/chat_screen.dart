@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -59,15 +60,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _focusNode.addListener(_onFocusChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _init();
-      // Auto-scroll when messages change (instead of inside build)
-      ref.listenManual(chatProvider, (_, __) => _scrollToBottom());
+      // Auto-scroll when messages change (instead of inside build).
+      // Also fire a light haptic when a tool pill transitions to done.
+      ref.listenManual(chatProvider, (prev, next) {
+        _scrollToBottom();
+        if (prev != null) {
+          final prevRunning = prev.where((m) => m.isToolStatus && m.isStreaming == true).length;
+          final nextRunning = next.where((m) => m.isToolStatus && m.isStreaming == true).length;
+          if (nextRunning < prevRunning) HapticFeedback.selectionClick();
+        }
+      });
     });
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients || _programmaticScroll) return;
     final pos = _scrollController.position;
-    _isNearBottom = pos.pixels >= pos.maxScrollExtent - 80;
+    final nearBottom = pos.pixels >= pos.maxScrollExtent - 80;
+    if (nearBottom != _isNearBottom) {
+      setState(() => _isNearBottom = nearBottom);
+    }
   }
 
   void _onFocusChange() {
@@ -197,6 +209,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
+    HapticFeedback.lightImpact();
     _controller.clear();
     _isNearBottom = true;
     _focusNode.requestFocus();
@@ -269,62 +282,132 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       body: Column(
         children: [
           Expanded(
-            child: messages.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.smart_toy_outlined,
-                            size: 64, color: theme.colorScheme.primary.withAlpha(128)),
-                        const SizedBox(height: 16),
-                        Text(
-                          context.l10n.appTitle,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          context.l10n.yourPersonalAssistant,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = messages[index];
-                      return _MessageBubble(
-                        message: msg,
-                        onCopy: () {
-                          Clipboard.setData(ClipboardData(text: msg.text));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(context.l10n.copiedToClipboard),
-                              duration: const Duration(seconds: 1),
+            child: Stack(
+              children: [
+                messages.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.smart_toy_outlined,
+                                size: 64, color: theme.colorScheme.primary.withAlpha(128)),
+                            const SizedBox(height: 16),
+                            Text(
+                              context.l10n.appTitle,
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                color: theme.colorScheme.primary,
+                              ),
                             ),
+                            const SizedBox(height: 8),
+                            Text(
+                              context.l10n.yourPersonalAssistant,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          final prev = index > 0 ? messages[index - 1] : null;
+                          final showSeparator = _shouldShowDateSeparator(prev, msg);
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (showSeparator)
+                                _DateSeparator(timestamp: msg.timestamp),
+                              _MessageBubble(
+                                message: msg,
+                                onCopy: () {
+                                  Clipboard.setData(ClipboardData(text: msg.text));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(context.l10n.copiedToClipboard),
+                                      duration: const Duration(seconds: 1),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           );
                         },
-                      );
-                    },
+                      ),
+                // Scroll-to-bottom FAB — only shown when scrolled up
+                if (!_isNearBottom && messages.isNotEmpty)
+                  Positioned(
+                    bottom: 8,
+                    right: 12,
+                    child: FloatingActionButton.small(
+                      heroTag: 'scroll_to_bottom',
+                      onPressed: () => _scrollToBottom(force: true),
+                      child: const Icon(Icons.keyboard_arrow_down),
+                    ),
                   ),
+              ],
+            ),
           ),
           _InputBar(
             controller: _controller,
             focusNode: _focusNode,
             isProcessing: isProcessing,
             onSend: _sendMessage,
+            onCancel: () => ref.read(chatProvider.notifier).cancelProcessing(),
             onAttach: modelSupportsVision ? _pickAndSendImage : null,
             onAttachDocument: _pickAndSendDocument,
           ),
         ],
       ),
+      ),
+    );
+  }
+
+  bool _shouldShowDateSeparator(ChatMessage? prev, ChatMessage current) {
+    if (prev == null) return true;
+    final p = prev.timestamp;
+    final c = current.timestamp;
+    return p.year != c.year || p.month != c.month || p.day != c.day;
+  }
+}
+
+class _DateSeparator extends StatelessWidget {
+  final DateTime timestamp;
+  const _DateSeparator({required this.timestamp});
+
+  String _label() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(timestamp.year, timestamp.month, timestamp.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: theme.colorScheme.outlineVariant, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              _label(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: theme.colorScheme.outlineVariant, height: 1)),
+        ],
       ),
     );
   }
@@ -341,6 +424,8 @@ class _MessageBubble extends ConsumerStatefulWidget {
 }
 
 class _MessageBubbleState extends ConsumerState<_MessageBubble> {
+  bool _toolExpanded = false;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -349,43 +434,87 @@ class _MessageBubbleState extends ConsumerState<_MessageBubble> {
 
     if (widget.message.isToolStatus) {
       final running = widget.message.isStreaming == true;
+      final hasResult = widget.message.toolResultText != null;
       return Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerHighest.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.build_circle, size: 14, color: colors.primary),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  widget.message.text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: (!running && hasResult)
+                  ? () => setState(() => _toolExpanded = !_toolExpanded)
+                  : null,
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.build_circle, size: 14, color: colors.primary),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        widget.message.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    if (running)
+                      SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: colors.primary,
+                        ),
+                      )
+                    else ...[
+                      Icon(Icons.check, size: 12, color: Colors.green.shade600),
+                      if (hasResult) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          _toolExpanded ? Icons.expand_less : Icons.expand_more,
+                          size: 12,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (_toolExpanded && hasResult)
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.all(10),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.85,
+                  maxHeight: 200,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    widget.message.toolResultText!,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: colors.onSurfaceVariant,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              if (running)
-                SizedBox(
-                  width: 11,
-                  height: 11,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: colors.primary,
-                  ),
-                )
-              else
-                Icon(Icons.check, size: 12, color: Colors.green.shade600),
-            ],
-          ),
+          ],
         ),
       );
     }
@@ -405,13 +534,31 @@ class _MessageBubbleState extends ConsumerState<_MessageBubble> {
       return _buildSlashCommandBubble(context, theme);
     }
 
+    final agentEmoji = isUser
+        ? null
+        : (ref.watch(activeAgentProvider)?.emoji ?? '🤖');
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isUser) ...[
+            Container(
+              width: 28,
+              height: 28,
+              margin: const EdgeInsets.only(right: 6, bottom: 4),
+              alignment: Alignment.center,
+              child: Text(agentEmoji!, style: const TextStyle(fontSize: 18)),
+            ),
+          ],
+          Flexible(
+            child: GestureDetector(
         onLongPress: widget.onCopy,
         child: Container(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.85,
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
           ),
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -444,6 +591,9 @@ class _MessageBubbleState extends ConsumerState<_MessageBubble> {
                           launchUrl(Uri.parse(href),
                               mode: LaunchMode.externalApplication);
                         }
+                      },
+                      builders: {
+                        'pre': _CopyableCodeBlockBuilder(context),
                       },
                       sizedImageBuilder: (config) =>
                           _buildMarkdownImage(config, theme),
@@ -509,6 +659,12 @@ class _MessageBubbleState extends ConsumerState<_MessageBubble> {
                       ),
                     ),
         ),
+      ),
+          ),  // Flexible
+          if (isUser) ...[
+            const SizedBox(width: 6),
+          ],
+        ],
       ),
     );
   }
@@ -891,6 +1047,7 @@ class _InputBar extends ConsumerStatefulWidget {
   final FocusNode focusNode;
   final bool isProcessing;
   final VoidCallback onSend;
+  final VoidCallback? onCancel;
   final VoidCallback? onAttach;
   final VoidCallback? onAttachDocument;
   const _InputBar({
@@ -898,6 +1055,7 @@ class _InputBar extends ConsumerStatefulWidget {
     required this.focusNode,
     required this.isProcessing,
     required this.onSend,
+    this.onCancel,
     this.onAttach,
     this.onAttachDocument,
   });
@@ -1024,16 +1182,20 @@ class _InputBarState extends ConsumerState<_InputBar> {
               ),
             ),
             const SizedBox(width: 4),
-            IconButton.filled(
-              onPressed: widget.isProcessing ? null : widget.onSend,
-              icon: widget.isProcessing
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
-            ),
+            if (widget.isProcessing)
+              IconButton.filled(
+                onPressed: widget.onCancel,
+                style: IconButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+                icon: const Icon(Icons.stop_rounded),
+              )
+            else
+              IconButton.filled(
+                onPressed: widget.onSend,
+                icon: const Icon(Icons.send),
+              ),
           ],
         ),
       ),
@@ -1115,6 +1277,66 @@ class _SlashCommandPicker extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Copyable code block builder for MarkdownBody
+// ---------------------------------------------------------------------------
+
+/// A [MarkdownElementBuilder] for `pre` (fenced code block) elements that
+/// renders the code in a monospace block with a copy-to-clipboard button in
+/// the top-right corner.
+class _CopyableCodeBlockBuilder extends MarkdownElementBuilder {
+  final BuildContext context;
+  _CopyableCodeBlockBuilder(this.context);
+
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    final theme = Theme.of(context);
+    // `element.textContent` gives the raw code string.
+    final code = element.textContent;
+    return Stack(
+      alignment: Alignment.topRight,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(12, 12, 40, 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SelectableText(
+            code,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 13.5,
+              color: theme.colorScheme.onSurface,
+              height: 1.4,
+            ),
+          ),
+        ),
+        IconButton(
+          iconSize: 16,
+          padding: const EdgeInsets.all(8),
+          constraints: const BoxConstraints(),
+          icon: Icon(Icons.copy, size: 16, color: theme.colorScheme.onSurfaceVariant),
+          tooltip: 'Copy',
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: code));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Copied to clipboard'),
+                duration: Duration(seconds: 1),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

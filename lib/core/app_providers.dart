@@ -707,6 +707,8 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isStreaming;
   final bool isToolStatus;
+  /// When non-null, the tool result that can be shown on expand.
+  final String? toolResultText;
 
   // Image message fields
   final String? imageData; // base64-encoded image bytes
@@ -724,6 +726,7 @@ class ChatMessage {
     required this.timestamp,
     this.isStreaming = false,
     this.isToolStatus = false,
+    this.toolResultText,
     this.imageData,
     this.imageMimeType,
     this.isDocumentMessage = false,
@@ -735,6 +738,7 @@ class ChatMessage {
   ChatMessage copyWith({
     String? text,
     bool? isStreaming,
+    String? toolResultText,
     String? imageData,
     String? imageMimeType,
   }) => ChatMessage(
@@ -743,6 +747,7 @@ class ChatMessage {
     timestamp: timestamp,
     isStreaming: isStreaming ?? this.isStreaming,
     isToolStatus: isToolStatus,
+    toolResultText: toolResultText ?? this.toolResultText,
     imageData: imageData ?? this.imageData,
     imageMimeType: imageMimeType ?? this.imageMimeType,
   );
@@ -786,9 +791,23 @@ final chatProvider = NotifierProvider<ChatNotifier, List<ChatMessage>>(
 class ChatNotifier extends Notifier<List<ChatMessage>> {
   bool _processing = false;
   bool get isProcessing => _processing;
+  bool _cancelled = false;
   bool _hatchTriggered = false;
   String? _historyLoadedForAgent; // agentId whose history is currently loaded
   bool _isAppInBackground = false;
+
+  /// Cancel the current streaming response. The active stream loop checks this
+  /// flag on each event and breaks early, finalising the partial response.
+  void cancelProcessing() {
+    if (!_processing) return;
+    _cancelled = true;
+    // Immediately mark the last assistant bubble as done so the UI updates.
+    final updated = List<ChatMessage>.from(state);
+    if (updated.isNotEmpty && !updated.last.isUser) {
+      updated[updated.length - 1] = updated.last.copyWith(isStreaming: false);
+      state = updated;
+    }
+  }
 
   /// Returns the session key currently being viewed in the chat screen.
   String _getSessionKey() => ref.read(activeSessionKeyProvider);
@@ -972,6 +991,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
 
     // Hatch: trigger the agent without persisting a visible user message.
     // The BOOTSTRAP.md in the system prompt tells the agent what to do.
+    _cancelled = false;
     _processing = true;
     state = [
       ChatMessage(
@@ -998,6 +1018,8 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
         chatId: 'default',
         userLanguage: userLanguage,
       )) {
+        if (_cancelled) break;
+
         if (event.toolName != null) {
           final updated = List<ChatMessage>.from(state);
           updated.insert(
@@ -1046,6 +1068,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
       }
       state = updated;
     } finally {
+      _cancelled = false;
       _processing = false;
       if (startedAudio && !IosGatewayService.isRunning) {
         Future.delayed(const Duration(seconds: 30), () {
@@ -1116,6 +1139,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
         chatId: 'default',
         contentBlocks: contentBlocks,
       )) {
+        if (_cancelled) break;
         if (event.textDelta != null) {
           buffer.write(event.textDelta);
           final updated = List<ChatMessage>.from(state);
@@ -1146,6 +1170,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
       );
       state = updated;
     } finally {
+      _cancelled = false;
       _processing = false;
       if (startedAudio && !IosGatewayService.isRunning) {
         Future.delayed(const Duration(seconds: 30), () {
@@ -1180,6 +1205,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
       ),
     ];
 
+    _cancelled = false;
     _processing = true;
 
     state = [
@@ -1221,6 +1247,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
         chatId: 'default',
         contentBlocks: contentBlocks,
       )) {
+        if (_cancelled) break;
         if (event.textDelta != null) {
           buffer.write(event.textDelta);
           final updated = List<ChatMessage>.from(state);
@@ -1251,6 +1278,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
       );
       state = updated;
     } finally {
+      _cancelled = false;
       _processing = false;
       if (startedAudio && !IosGatewayService.isRunning) {
         Future.delayed(const Duration(seconds: 30), () {
@@ -1292,6 +1320,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
     required bool showUserMessage,
   }) async {
     if (_processing) return;
+    _cancelled = false;
 
     if (showUserMessage) {
       state = [
@@ -1329,6 +1358,8 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
         channelType: 'webchat',
         chatId: 'default',
       )) {
+        if (_cancelled) break;
+
         if (event.toolName != null) {
           final updated = List<ChatMessage>.from(state);
           updated.insert(
@@ -1345,11 +1376,14 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
         }
 
         if (event.toolResult != null) {
-          // Mark the most recent running tool pill as completed.
+          // Mark the most recent running tool pill as completed and store result.
           final updated = List<ChatMessage>.from(state);
           for (var i = updated.length - 1; i >= 0; i--) {
             if (updated[i].isToolStatus && updated[i].isStreaming == true) {
-              updated[i] = updated[i].copyWith(isStreaming: false);
+              updated[i] = updated[i].copyWith(
+                isStreaming: false,
+                toolResultText: event.toolResult,
+              );
               break;
             }
           }
@@ -1382,11 +1416,12 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
     } catch (e) {
       final updated = List<ChatMessage>.from(state);
       updated[updated.length - 1] = updated.last.copyWith(
-        text: 'Error: $e',
+        text: _cancelled ? (state.last.text.isEmpty ? '_(cancelled)_' : state.last.text) : 'Error: $e',
         isStreaming: false,
       );
       state = updated;
     } finally {
+      _cancelled = false;
       _processing = false;
       // Stop background audio if we started it just for this request and the
       // gateway isn't running (which manages its own audio lifecycle). Grace

@@ -103,7 +103,7 @@ class FlutterClawTaskHandler extends TaskHandler {
     _port = _configManager!.config.gateway.port;
 
     _gatewayState = 'starting';
-    _sendNotificationToMain('FlutterClaw', 'Iniciando... $_host:$_port');
+    _sendNotificationToMain('FlutterClaw', 'Starting... $_host:$_port');
 
     final result = await _createAndStartGatewayWithRetry();
 
@@ -129,7 +129,7 @@ class FlutterClawTaskHandler extends TaskHandler {
       _gatewayState = 'error';
       _lastError = result.error ?? 'Unknown error';
 
-      _sendNotificationToMain('Error al iniciar gateway', _buildNotificationText());
+      _sendNotificationToMain('Gateway error', _buildNotificationText());
 
       await LiveActivityService.startActivityWithError(
         host: _host,
@@ -153,8 +153,8 @@ class FlutterClawTaskHandler extends TaskHandler {
           _gatewayState = 'retrying';
           _isRetrying = true;
           _sendNotificationToMain(
-            'Reintentando...',
-            'Intento $attempt de $maxAttempts  \u00B7  $_host:$_port',
+            'Retrying...',
+            'Attempt $attempt of $maxAttempts  \u00B7  $_host:$_port',
           );
 
           final delayMs = retryDelays[attempt - 1];
@@ -250,10 +250,10 @@ class FlutterClawTaskHandler extends TaskHandler {
             0, (int sum, SessionMeta s) => sum + s.totalTokens)
         : 0;
     final title = _gatewayState == 'running'
-        ? 'Gateway activo'
+        ? 'Gateway active'
         : _gatewayState == 'error'
-            ? 'Error en gateway'
-            : 'Gateway detenido';
+            ? 'Gateway error'
+            : 'Gateway stopped';
     final text = _buildNotificationText(
       sessionCount: sessionCount,
       tokensProcessed: tokensProcessed,
@@ -271,7 +271,7 @@ class FlutterClawTaskHandler extends TaskHandler {
         ? DateTime.now().difference(_startedAt!).inSeconds
         : 0;
     final addr = '$_host:$_port';
-    final modelLabel = _model.isNotEmpty ? _model : 'sin modelo';
+    final modelLabel = _model.isNotEmpty ? _model : 'no model';
 
     switch (_gatewayState) {
       case 'running':
@@ -283,17 +283,17 @@ class FlutterClawTaskHandler extends TaskHandler {
         }
         return line1;
       case 'starting':
-        return '\u25CB Iniciando...  \u00B7  $addr';
+        return '\u25CB Starting...  \u00B7  $addr';
       case 'retrying':
-        return '\u21BA Reintentando...  \u00B7  $addr';
+        return '\u21BA Retrying...  \u00B7  $addr';
       case 'restarting':
-        return '\u21BA Reiniciando gateway...';
+        return '\u21BA Restarting gateway...';
       case 'error':
-        final err = _lastError ?? 'Error desconocido';
+        final err = _lastError ?? 'Unknown error';
         final short = err.length > 60 ? '${err.substring(0, 60)}...' : err;
         return '\u26A0 $short';
       case 'stopped':
-        return '\u25A1 Detenido';
+        return '\u25A1 Stopped';
       default:
         return _gatewayState;
     }
@@ -398,7 +398,7 @@ class FlutterClawTaskHandler extends TaskHandler {
       _gatewayState = 'error';
       _lastError = result.error ?? 'Restart failed';
 
-      _sendNotificationToMain('Error al reiniciar', _buildNotificationText());
+      _sendNotificationToMain('Restart error', _buildNotificationText());
 
       LiveActivityService.updateActivity(
         isRunning: false,
@@ -466,8 +466,8 @@ class BackgroundService {
     metaDataName: 'com.flutterclaw.notification_icon',
   );
   static const notificationButtons = [
-    NotificationButton(id: 'open', text: 'Abrir'),
-    NotificationButton(id: 'stop', text: 'Detener'),
+    NotificationButton(id: 'open', text: 'Open'),
+    NotificationButton(id: 'stop', text: 'Stop'),
   ];
 
   /// Initialize the foreground task. Call once at app startup (e.g. in main).
@@ -479,7 +479,7 @@ class BackgroundService {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'flutterclaw_foreground',
         channelName: 'FlutterClaw Gateway',
-        channelDescription: 'Estado del gateway de IA en ejecuci\u00f3n',
+        channelDescription: 'AI gateway running status',
         channelImportance: NotificationChannelImportance.DEFAULT,
         priority: NotificationPriority.DEFAULT,
         visibility: NotificationVisibility.VISIBILITY_PUBLIC,
@@ -511,7 +511,7 @@ class BackgroundService {
 
     return FlutterForegroundTask.startService(
       notificationTitle: 'FlutterClaw',
-      notificationText: 'Iniciando gateway...',
+      notificationText: 'Starting gateway...',
       notificationIcon: notificationIcon,
       notificationButtons: notificationButtons,
       callback: startFlutterClawTask,

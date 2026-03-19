@@ -667,7 +667,16 @@ class AgentLoop {
       }
     }
 
-    return sections.join('\n\n');
+    final joined = sections.join('\n\n');
+
+    // Total system prompt cap: 150,000 chars (~110K tokens) matching OpenClaw's
+    // agents.defaults.bootstrapTotalMaxChars default. Prevents exceeding model
+    // context limits when many large workspace files are present.
+    const totalLimit = 150000;
+    if (joined.length > totalLimit) {
+      return '${joined.substring(0, totalLimit)}\n\n[... system prompt truncated at 150,000 chars ...]';
+    }
+    return joined;
   }
 
   String _dateString(DateTime dt) =>
