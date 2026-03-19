@@ -171,6 +171,8 @@ class ChatCommandHandler {
 
     final command = args.join(' ');
 
+    try {
+
     // Check if sandbox is ready
     final status = await sandboxService.status();
     if (status['error'] == true) {
@@ -231,6 +233,12 @@ class ChatCommandHandler {
       handled: true,
       response: output.toString(),
     );
+    } catch (e) {
+      return ChatCommandResult(
+        handled: true,
+        response: '❌ Error: $e',
+      );
+    }
   }
 
   ChatCommandResult _handleHelp() {
