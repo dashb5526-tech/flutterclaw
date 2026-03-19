@@ -192,6 +192,15 @@ class OpenAiProvider implements LlmProvider {
     'X-OpenRouter-Title': 'FlutterClaw',
   };
 
+  /// Whether this model is an OpenAI o-series reasoning model.
+  /// These models don't support `temperature` and require
+  /// `max_completion_tokens` instead of `max_tokens`.
+  static bool _isReasoningModel(String model) {
+    final m = model.toLowerCase();
+    // o1, o1-mini, o1-preview, o3, o3-mini, o4-mini, etc.
+    return RegExp(r'^o\d').hasMatch(m);
+  }
+
   Map<String, dynamic> _buildBody(LlmRequest request, {required bool stream}) {
     // Build message list with consecutive-role protection.
     // If a previous request failed mid-stream, the session JSONL may contain a
@@ -208,13 +217,21 @@ class OpenAiProvider implements LlmProvider {
       messages.add(converted);
     }
 
+    final reasoning = _isReasoningModel(request.model);
+
     final body = <String, dynamic>{
       'model': request.model,
       'messages': messages,
-      'max_tokens': request.maxTokens,
-      'temperature': request.temperature,
       'stream': stream,
     };
+
+    // o-series reasoning models use max_completion_tokens and don't support temperature.
+    if (reasoning) {
+      body['max_completion_tokens'] = request.maxTokens;
+    } else {
+      body['max_tokens'] = request.maxTokens;
+      body['temperature'] = request.temperature;
+    }
 
     if (request.tools != null && request.tools!.isNotEmpty) {
       body['tools'] = request.tools;

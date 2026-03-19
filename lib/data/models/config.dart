@@ -792,6 +792,7 @@ After this introduction, this file will be automatically deleted.
     // Run migrations after loading
     await _migrateToMultiAgent();
     _migrateApiKeysToProviderCredentials();
+    _migrateStealthModelIds();
     // IDENTITY.md is the authoritative source — sync name/emoji into AgentProfile
     await syncAgentIdentitiesFromWorkspace();
     debugPrint(
@@ -890,6 +891,49 @@ After this introduction, this file will be automatically deleted.
         '[ConfigManager] Migrated ${migrated.length} provider credentials from per-model keys',
       );
     }
+  }
+
+  void _migrateStealthModelIds() {
+    // All stealth and MiMo models migrate to the free OpenRouter auto-router.
+    const deprecatedIds = {
+      'openrouter/healer-alpha',
+      'openrouter/hunter-alpha',
+      'openrouter/xiaomi/mimo-v2-omni',
+      'openrouter/xiaomi/mimo-v2-pro',
+    };
+    const deprecatedNames = {
+      'Healer Alpha',
+      'Hunter Alpha',
+      'MiMo-V2-Omni',
+      'MiMo-V2-Pro',
+    };
+    const targetId = 'openrouter/auto';
+    const targetName = 'Free Models Router';
+
+    final needsMigration = _config.modelList.any((m) => deprecatedIds.contains(m.model));
+    if (!needsMigration) return;
+
+    final updatedModels = _config.modelList.map((m) {
+      if (!deprecatedIds.contains(m.model)) return m;
+      return ModelEntry(
+        modelName: targetName,
+        model: targetId,
+        apiKey: m.apiKey,
+        apiBase: m.apiBase,
+        requestTimeout: m.requestTimeout,
+        provider: m.provider,
+        isFree: true,
+        input: m.input,
+      );
+    }).toList();
+
+    final updatedAgents = _config.agentProfiles.map((a) {
+      if (!deprecatedNames.contains(a.modelName)) return a;
+      return a.copyWith(modelName: targetName);
+    }).toList();
+
+    _config = _config.copyWith(modelList: updatedModels, agentProfiles: updatedAgents);
+    debugPrint('[ConfigManager] Migrated stealth/MiMo models to Free Models Router');
   }
 
   Future<void> save() async {

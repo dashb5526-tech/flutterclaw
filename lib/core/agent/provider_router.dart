@@ -54,7 +54,8 @@ class FailoverProviderRouter implements ProviderRouter {
   }
 
   Future<LlmResponse> _tryFallbacks(LlmRequest request, Object primaryError) async {
-    final models = configManager.config.modelList;
+    final config = configManager.config;
+    final models = config.modelList;
     if (models.length <= 1) throw primaryError;
 
     for (var i = 1; i < models.length; i++) {
@@ -64,8 +65,8 @@ class FailoverProviderRouter implements ProviderRouter {
       try {
         final fallbackRequest = request.copyWith(
           model: fallbackModel.model,
-          apiKey: fallbackModel.apiKey ?? request.apiKey,
-          apiBase: fallbackModel.apiBase ?? request.apiBase,
+          apiKey: config.resolveApiKey(fallbackModel),
+          apiBase: config.resolveApiBase(fallbackModel),
         );
 
         final provider = i < fallbacks.length ? fallbacks[i] : primary;

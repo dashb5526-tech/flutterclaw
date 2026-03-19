@@ -55,7 +55,7 @@ FlutterClaw is currently in **early alpha**. This release is experimental: you m
 - **Standalone gateway + agent** running 24/7 in the background (Android foreground service, iOS background modes)
 - **100% API-compatible** with OpenClaw WebSocket protocol and config format
 - **Multi-provider LLM support**: OpenAI, Anthropic, Groq, DeepSeek, Gemini, Zhipu, OpenRouter, Volcengine, Ollama, Qwen
-- **OpenRouter stealth models**: compatible with stealth models such as Healer Alpha and Hunter Alpha
+- **OpenRouter free models**: featured free models (MiMo-V2-Omni, MiMo-V2-Pro) with custom model ID support
 - **Streaming responses** with real-time UI updates (SSE for Anthropic, chunked for OpenAI-compatible)
 - **Embedded WebSocket server** on localhost for external tool/CLI access
 - **Secure storage** for API keys via platform keychain
@@ -260,7 +260,7 @@ FlutterClaw App
 | Ollama | OpenAI-compatible | http://localhost:11434/v1 |
 | Qwen | OpenAI-compatible | https://dashscope.aliyuncs.com/compatible-mode/v1 |
 
-OpenRouter stealth models (e.g. Healer Alpha, Hunter Alpha) are supported via the OpenRouter provider.
+OpenRouter models are supported via the OpenRouter provider. Select featured free models (e.g. MiMo-V2-Omni, MiMo-V2-Pro) from the catalog or enter any model ID manually.
 
 ---
 

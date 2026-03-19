@@ -44,7 +44,9 @@ class AuthResult {
 class _AuthPageState extends State<AuthPage> {
   late final TextEditingController _apiKeyController;
   late final TextEditingController _apiBaseController;
+  late final TextEditingController _customModelController;
   String? _selectedModelId;
+  bool _useCustomModel = false;
   bool _isValidating = false;
   _ValidationResult? _validationResult;
 
@@ -52,6 +54,7 @@ class _AuthPageState extends State<AuthPage> {
   void initState() {
     super.initState();
     _apiKeyController = TextEditingController(text: widget.initialApiKey ?? '');
+    _customModelController = TextEditingController();
     final provider = ModelCatalog.getProvider(widget.providerId);
     _apiBaseController = TextEditingController(
       text: widget.initialApiBase ?? provider?.apiBase ?? '',
@@ -73,18 +76,22 @@ class _AuthPageState extends State<AuthPage> {
     _apiKeyController.removeListener(_emitChange);
     _apiKeyController.dispose();
     _apiBaseController.dispose();
+    _customModelController.dispose();
     super.dispose();
   }
 
   void _emitChange() {
-    if (_apiKeyController.text.isEmpty || _selectedModelId == null) return;
+    final effectiveModelId = _useCustomModel
+        ? (_customModelController.text.trim().isNotEmpty ? _customModelController.text.trim() : null)
+        : _selectedModelId;
+    if (_apiKeyController.text.isEmpty || effectiveModelId == null) return;
     final models = ModelCatalog.modelsForProvider(widget.providerId);
-    final selectedModel = models.where((m) => m.id == _selectedModelId).firstOrNull;
+    final selectedModel = models.where((m) => m.id == effectiveModelId).firstOrNull;
 
     widget.onChanged(AuthResult(
       apiKey: _apiKeyController.text.trim(),
-      modelId: _selectedModelId!,
-      modelDisplayName: selectedModel?.displayName ?? _selectedModelId!,
+      modelId: effectiveModelId,
+      modelDisplayName: selectedModel?.displayName ?? effectiveModelId,
       apiBase: _apiBaseController.text.trim().isNotEmpty
           ? _apiBaseController.text.trim()
           : null,
@@ -300,12 +307,51 @@ class _AuthPageState extends State<AuthPage> {
           const SizedBox(height: 8),
           ...models.map((m) => _ModelTile(
                 model: m,
-                isSelected: _selectedModelId == m.id,
+                isSelected: !_useCustomModel && _selectedModelId == m.id,
                 onTap: () {
-                  setState(() => _selectedModelId = m.id);
+                  setState(() {
+                    _useCustomModel = false;
+                    _selectedModelId = m.id;
+                    _customModelController.clear();
+                  });
                   _emitChange();
                 },
               )),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            icon: Icon(
+              _useCustomModel ? Icons.close : Icons.edit_outlined,
+              size: 16,
+            ),
+            label: Text(
+              _useCustomModel
+                  ? context.l10n.selectModel
+                  : 'Enter a custom model ID',
+            ),
+            onPressed: () {
+              setState(() {
+                _useCustomModel = !_useCustomModel;
+                if (!_useCustomModel) {
+                  _customModelController.clear();
+                  final free = models.where((m) => m.isFree).firstOrNull;
+                  _selectedModelId = free?.id ?? models.first.id;
+                }
+              });
+              _emitChange();
+            },
+          ),
+          if (_useCustomModel) ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: _customModelController,
+              decoration: InputDecoration(
+                labelText: context.l10n.modelId,
+                border: const OutlineInputBorder(),
+                hintText: 'e.g. openrouter/google/gemini-2.5-flash',
+              ),
+              onChanged: (_) => _emitChange(),
+            ),
+          ],
         ] else ...[
           TextField(
             decoration: InputDecoration(

@@ -112,7 +112,7 @@ class ProviderRouter {
     final apiKey = modelEntry.apiKey ?? '';
 
     // OpenRouter model IDs always include the org prefix (e.g.
-    // "openrouter/healer-alpha", "google/gemini-2.5-flash"), so we must NOT
+    // "openrouter/xiaomi/mimo-v2-pro", "google/gemini-2.5-flash"), so we must NOT
     // strip the vendor segment.  For all other vendors the first segment is
     // our internal routing prefix and should be removed.
     final modelForApi = modelEntry.vendor == 'openrouter'

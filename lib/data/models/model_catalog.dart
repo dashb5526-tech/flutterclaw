@@ -97,25 +97,7 @@ class ModelCatalog {
   ];
 
   static const models = <CatalogModel>[
-    // OpenRouter free models (featured) — Healer Alpha first (default)
-    CatalogModel(
-      id: 'openrouter/healer-alpha',
-      displayName: 'Healer Alpha',
-      providerId: 'openrouter',
-      isFree: true,
-      contextWindow: 262144,
-      description: 'Omni-modal: vision, audio, reasoning',
-      input: ['text', 'image', 'audio'],
-    ),
-    CatalogModel(
-      id: 'openrouter/hunter-alpha',
-      displayName: 'Hunter Alpha',
-      providerId: 'openrouter',
-      isFree: true,
-      contextWindow: 1048576,
-      description: '1T params, agentic, long-horizon planning',
-      input: ['text'],
-    ),
+    // OpenRouter free models (featured) — Free Models Router first (default)
     CatalogModel(
       id: 'openrouter/auto',
       displayName: 'Free Models Router',
@@ -123,6 +105,24 @@ class ModelCatalog {
       isFree: true,
       contextWindow: 200000,
       description: 'Auto-selects from available free models',
+      input: ['text'],
+    ),
+    CatalogModel(
+      id: 'openrouter/xiaomi/mimo-v2-omni',
+      displayName: 'MiMo-V2-Omni',
+      providerId: 'openrouter',
+      isFree: false,
+      contextWindow: 262144,
+      description: 'Omni-modal: vision, audio, reasoning',
+      input: ['text', 'image', 'audio'],
+    ),
+    CatalogModel(
+      id: 'openrouter/xiaomi/mimo-v2-pro',
+      displayName: 'MiMo-V2-Pro',
+      providerId: 'openrouter',
+      isFree: false,
+      contextWindow: 1048576,
+      description: 'Agentic, long-horizon planning',
       input: ['text'],
     ),
 

@@ -159,24 +159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onTap: () => _showEditModel(context, index, m),
                   onLongPress: isDefault
                       ? null
-                      : () async {
-                          configManager.update(config.copyWith(
-                            agents: AgentsConfig(
-                              defaults: AgentsDefaults(modelName: m.modelName),
-                            ),
-                          ));
-                          await configManager.save();
-                          setState(() {});
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    '${m.modelName} set as default model'),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        },
+                      : () => _setDefaultModel(context, m.modelName),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Row(
@@ -489,6 +472,116 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  // -- Set default model with optional agent update --
+
+  Future<void> _setDefaultModel(BuildContext context, String modelName) async {
+    final configManager = ref.read(configManagerProvider);
+    final config = configManager.config;
+    final agents = config.agentProfiles;
+
+    // Agents that use a different model than the new default.
+    final agentsToUpdate = agents.where((a) => a.modelName != modelName).toList();
+
+    bool updateAgents = false;
+    bool startNewSessions = false;
+
+    if (agentsToUpdate.isNotEmpty) {
+      final result = await showDialog<_DefaultModelAction>(
+        context: context,
+        builder: (ctx) {
+          bool agents = true;
+          bool sessions = true;
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) => AlertDialog(
+              title: const Text('Change default model'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Set $modelName as the default model.'),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Also update ${agentsToUpdate.length} agent${agentsToUpdate.length > 1 ? 's' : ''}',
+                    ),
+                    subtitle: Text(
+                      agentsToUpdate.map((a) => '${a.emoji} ${a.name}').join(', '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    value: agents,
+                    onChanged: (v) => setDialogState(() => agents = v ?? false),
+                  ),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Start new sessions'),
+                    subtitle: const Text('Current conversations will be archived'),
+                    value: sessions,
+                    onChanged: (v) => setDialogState(() => sessions = v ?? false),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(
+                    ctx,
+                    _DefaultModelAction(updateAgents: agents, startNewSessions: sessions),
+                  ),
+                  child: const Text('Apply'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (result == null) return; // cancelled
+      updateAgents = result.updateAgents;
+      startNewSessions = result.startNewSessions;
+    }
+
+    // 1. Update default model
+    configManager.update(config.copyWith(
+      agents: AgentsConfig(
+        defaults: AgentsDefaults(modelName: modelName),
+      ),
+    ));
+
+    // 2. Update agent profiles if requested
+    if (updateAgents && agentsToUpdate.isNotEmpty) {
+      final updatedProfiles = config.agentProfiles.map((a) {
+        return a.copyWith(modelName: modelName);
+      }).toList();
+      configManager.update(configManager.config.copyWith(
+        agentProfiles: updatedProfiles,
+      ));
+    }
+
+    await configManager.save();
+
+    // 3. Start new sessions if requested
+    if (startNewSessions) {
+      ref.read(chatProvider.notifier).clear();
+    }
+
+    setState(() {});
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$modelName set as default model'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   // -- Add provider credential flow --
 
   void _showAddProviderFlow(BuildContext context) {
@@ -797,6 +890,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 }
 
 // ---------------------------------------------------------------------------
+class _DefaultModelAction {
+  final bool updateAgents;
+  final bool startNewSessions;
+  const _DefaultModelAction({required this.updateAgents, required this.startNewSessions});
+}
+
 // Full-screen Add Provider flow
 // ---------------------------------------------------------------------------
 
@@ -974,13 +1073,16 @@ class _AddModelScreen extends ConsumerStatefulWidget {
 class _AddModelScreenState extends ConsumerState<_AddModelScreen> {
   String? _selectedProviderId;
   String? _selectedModelId;
+  bool _useCustomModel = false;
   final _apiKeyCtl = TextEditingController();
   final _apiBaseCtl = TextEditingController();
+  final _customModelCtl = TextEditingController();
 
   @override
   void dispose() {
     _apiKeyCtl.dispose();
     _apiBaseCtl.dispose();
+    _customModelCtl.dispose();
     super.dispose();
   }
 
@@ -1009,6 +1111,8 @@ class _AddModelScreenState extends ConsumerState<_AddModelScreen> {
                 onTap: () => setState(() {
                   _selectedProviderId = p.id;
                   _selectedModelId = null;
+                  _useCustomModel = false;
+                  _customModelCtl.clear();
                   _apiBaseCtl.text = p.apiBase ?? '';
                 }),
               )),
@@ -1024,9 +1128,39 @@ class _AddModelScreenState extends ConsumerState<_AddModelScreen> {
             ...ModelCatalog.modelsForProvider(_selectedProviderId!)
                 .map((m) => _ModelChip(
                       model: m,
-                      isSelected: _selectedModelId == m.id,
-                      onTap: () => setState(() => _selectedModelId = m.id),
+                      isSelected: !_useCustomModel && _selectedModelId == m.id,
+                      onTap: () => setState(() {
+                        _selectedModelId = m.id;
+                        _useCustomModel = false;
+                        _customModelCtl.clear();
+                      }),
                     )),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              icon: Icon(
+                _useCustomModel ? Icons.close : Icons.edit_outlined,
+                size: 16,
+              ),
+              label: Text(
+                _useCustomModel ? 'Select from list' : 'Enter a custom model ID',
+              ),
+              onPressed: () => setState(() {
+                _useCustomModel = !_useCustomModel;
+                if (!_useCustomModel) _customModelCtl.clear();
+              }),
+            ),
+            if (_useCustomModel) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _customModelCtl,
+                decoration: const InputDecoration(
+                  labelText: 'Model ID',
+                  border: OutlineInputBorder(),
+                  hintText: 'e.g. openrouter/google/gemini-2.5-flash',
+                ),
+                onChanged: (val) => setState(() => _selectedModelId = val.trim().isNotEmpty ? val.trim() : null),
+              ),
+            ],
 
             const SizedBox(height: 24),
 
