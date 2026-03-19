@@ -165,7 +165,8 @@ class ChatCommandHandler {
         handled: true,
         response: '**Usage:** `/sh <command>`\n\n'
             'Runs a command in the Alpine Linux sandbox.\n'
-            'Example: `/sh uname -a`',
+            'Example: `/sh uname -a`\n'
+            'For network operations: `/sh apk add git` (auto-detects 90s timeout)',
       );
     }
 
@@ -193,10 +194,18 @@ class ChatCommandHandler {
       }
     }
 
+    // Auto-detect commands that need longer timeouts
+    final needsLongTimeout = command.contains('apk add') ||
+        command.contains('apk upgrade') ||
+        command.contains('pip install') ||
+        command.contains('npm install') ||
+        command.contains('git clone');
+    final timeoutMs = needsLongTimeout ? 90000 : 30000;
+
     // Execute the command
     final result = await sandboxService.exec(
       command: command,
-      timeoutMs: 30000,
+      timeoutMs: timeoutMs,
     );
 
     if (result['error'] == true) {
@@ -210,6 +219,13 @@ class ChatCommandHandler {
     final stdout = (result['stdout'] as String?) ?? '';
     final stderr = (result['stderr'] as String?) ?? '';
     final timedOut = result['timed_out'] == true;
+
+    // Debug logging
+    print('🐛 /sh command: $command');
+    print('🐛 exit_code: $exitCode, timed_out: $timedOut');
+    print('🐛 stdout length: ${stdout.length}, stderr length: ${stderr.length}');
+    if (stdout.isNotEmpty) print('🐛 stdout preview: ${stdout.substring(0, stdout.length > 100 ? 100 : stdout.length)}');
+    if (stderr.isNotEmpty) print('🐛 stderr preview: ${stderr.substring(0, stderr.length > 100 ? 100 : stderr.length)}');
 
     if (timedOut) {
       return const ChatCommandResult(

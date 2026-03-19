@@ -771,6 +771,9 @@ class ChatMessage {
   final bool isError;
   final int? errorStatusCode;
 
+  // Shell command message (for terminal-style rendering)
+  final bool isShellCommand;
+
   const ChatMessage({
     required this.text,
     required this.isUser,
@@ -786,6 +789,7 @@ class ChatMessage {
     this.documentFileName,
     this.isError = false,
     this.errorStatusCode,
+    this.isShellCommand = false,
   });
 
   ChatMessage copyWith({
@@ -997,6 +1001,14 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
 
     if (history.isEmpty) return;
 
+    // First pass: build a map of tool_call_id → tool result content
+    final toolResults = <String, String>{};
+    for (final msg in history) {
+      if (msg.role == 'tool' && msg.toolCallId != null) {
+        toolResults[msg.toolCallId!] = msg.content?.toString() ?? '';
+      }
+    }
+
     final messages = <ChatMessage>[];
     for (final msg in history) {
       if (msg.role == 'system') continue;
@@ -1011,12 +1023,17 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
           try {
             args = jsonDecode(tc.function.arguments) as Map<String, dynamic>?;
           } catch (_) {}
+
+          // Get the tool result if available
+          final toolResult = toolResults[tc.id];
+
           messages.add(
             ChatMessage(
               text: _formatToolStatus(tc.function.name, args),
               isUser: false,
               timestamp: DateTime.now(),
               isToolStatus: true,
+              toolResultText: toolResult,
             ),
           );
         }
@@ -1399,6 +1416,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
       final handler = ref.read(chatCommandHandlerProvider);
       final result = await handler.handle(_getSessionKey(), text);
       if (result.handled && result.response != null) {
+        final isShellCmd = text.trim().startsWith('/sh ');
         state = [
           ...state,
           ChatMessage(text: text, isUser: true, timestamp: DateTime.now()),
@@ -1406,6 +1424,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
             text: result.response!,
             isUser: false,
             timestamp: DateTime.now(),
+            isShellCommand: isShellCmd,
           ),
         ];
         return;

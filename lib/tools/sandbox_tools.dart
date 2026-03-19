@@ -72,7 +72,14 @@ class RunShellCommandTool extends Tool {
 
   @override
   Stream<String>? executeStream(Map<String, dynamic> args) async* {
-    // Yield a "running" notice immediately so the tool card shows activity,
+    // TODO: Implement real line-by-line streaming of stdout/stderr.
+    // Currently this is a pseudo-stream: shows "Running..." then waits for
+    // the entire command to complete. Real streaming would require:
+    // - Android: EventChannel in SandboxHandler.kt to emit stdout lines
+    // - iOS: EventChannel in WasmSandboxHandler.swift
+    // - Dart: SandboxService.exec() returning Stream<String> instead of Future
+    //
+    // For now, yield a "running" notice immediately so the tool card shows activity,
     // then yield the full output once the command completes.
     yield '⏳ Running…\n';
     final result = await execute(args);
