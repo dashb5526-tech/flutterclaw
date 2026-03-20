@@ -66,7 +66,7 @@ class ModelCatalog {
     CatalogProvider(
       id: 'anthropic',
       displayName: 'Anthropic',
-      description: 'Claude Sonnet 4.5, Claude Opus 4.6.',
+      description: 'Claude Haiku 4.5, Sonnet 4.5/4.6, Opus 4.6.',
       icon: Icons.psychology,
       signupUrl: 'https://console.anthropic.com/settings/keys',
       apiBase: 'https://api.anthropic.com',
@@ -136,7 +136,7 @@ class ModelCatalog {
       input: ['text', 'image'],
     ),
     CatalogModel(
-      id: 'openrouter/xiaomi/mimo-v2-omni',
+      id: 'xiaomi/mimo-v2-omni',
       displayName: 'MiMo-V2-Omni',
       providerId: 'openrouter',
       isFree: false,
@@ -145,7 +145,7 @@ class ModelCatalog {
       input: ['text', 'image', 'audio'],
     ),
     CatalogModel(
-      id: 'openrouter/xiaomi/mimo-v2-pro',
+      id: 'xiaomi/mimo-v2-pro',
       displayName: 'MiMo-V2-Pro',
       providerId: 'openrouter',
       isFree: false,
@@ -183,11 +183,29 @@ class ModelCatalog {
 
     // Anthropic
     CatalogModel(
+      id: 'claude-haiku-4-5-20251001',
+      displayName: 'Claude Haiku 4.5',
+      providerId: 'anthropic',
+      isFree: false,
+      contextWindow: 200000,
+      description: 'Fastest Claude — low cost',
+      input: ['text', 'image'],
+    ),
+    CatalogModel(
       id: 'claude-sonnet-4-5-20250514',
       displayName: 'Claude Sonnet 4.5',
       providerId: 'anthropic',
       isFree: false,
       contextWindow: 200000,
+      input: ['text', 'image'],
+    ),
+    CatalogModel(
+      id: 'claude-sonnet-4-6-20260301',
+      displayName: 'Claude Sonnet 4.6',
+      providerId: 'anthropic',
+      isFree: false,
+      contextWindow: 1000000,
+      description: 'Latest Sonnet — 1M context, balanced',
       input: ['text', 'image'],
     ),
     CatalogModel(
