@@ -294,7 +294,7 @@ class AnthropicProvider implements LlmProvider {
           {
             'type': 'tool_result',
             'tool_use_id': m.toolCallId,
-            'content': m.content is String ? m.content : m.content.toString(),
+            'content': _toolResultContent(m.content),
           }
         ],
       };
@@ -360,6 +360,36 @@ class AnthropicProvider implements LlmProvider {
       'role': m.role,
       'content': blocks,
     };
+  }
+
+  /// Converts tool result content to the correct Anthropic format.
+  ///
+  /// If the content is a JSON-encoded image block (produced by ui_screenshot),
+  /// it is parsed and returned as an array of Anthropic content blocks so the
+  /// vision model can actually see the image. Otherwise returns a plain string.
+  dynamic _toolResultContent(dynamic content) {
+    if (content is! String) return content?.toString() ?? '';
+
+    if (content.contains('"type":"image"') ||
+        content.contains('"type": "image"')) {
+      try {
+        final parsed = jsonDecode(content);
+        if (parsed is Map<String, dynamic> &&
+            parsed['type'] == 'image' &&
+            parsed.containsKey('data') &&
+            parsed.containsKey('mimeType')) {
+          final blocks = <Map<String, dynamic>>[
+            _convertBlockToAnthropic(Map<String, dynamic>.from(parsed)),
+          ];
+          if (parsed['note'] != null) {
+            blocks.add({'type': 'text', 'text': parsed['note'] as String});
+          }
+          return blocks;
+        }
+      } catch (_) {}
+    }
+
+    return content;
   }
 
   /// Converts a neutral content block to Anthropic's format.
