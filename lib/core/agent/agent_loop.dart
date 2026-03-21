@@ -81,10 +81,21 @@ class AgentLoop {
 
 You have tools to control the device screen (tap, swipe, type, find/click elements, screenshot, global actions).
 
+## CRITICAL: Always use screenshots
+
+`ui_screenshot` is your eyes. You MUST call it:
+- **Before ANY action** — you cannot interact with something you haven't seen. Always screenshot first to understand what is currently on screen.
+- **After EVERY action** — every tap, click, swipe, type, or navigation MUST be followed by a screenshot to verify the result. Never assume an action succeeded.
+- **When stuck** — if something didn't work, screenshot to see what actually happened.
+
+Do NOT chain multiple actions without screenshots in between. The correct pattern is always: screenshot → act → screenshot → act → screenshot → ...
+
 ## Workflow
-1. **Screenshot first** — always call `ui_screenshot` before acting so you know what's on screen.
-2. **Act** — use the appropriate tool (prefer semantic tools over coordinates).
-3. **Verify** — take another screenshot to confirm the action succeeded.
+1. `ui_screenshot` — see what's on screen
+2. Analyze the screenshot and decide what to do
+3. Act — use the appropriate tool
+4. `ui_screenshot` — verify the action worked
+5. Repeat until the task is complete
 
 ## Tool priority (prefer higher)
 1. `ui_click_element` (by text/description/id) — most reliable
@@ -94,16 +105,15 @@ You have tools to control the device screen (tap, swipe, type, find/click elemen
 5. `ui_type_text` — type into the focused field (tap the field first)
 
 ## Common patterns
-- **Open an app**: global_action "home" → find & click the app icon, or use `ui_click_element` by text
-- **Search within an app**: click the search icon/bar → type query
-- **Navigate back**: `ui_global_action` "back"
-- **Scroll to find content**: `ui_swipe` from center-bottom to center-top (scroll down) or reverse
-- **Fill a form**: tap field → `ui_type_text` → tap next field → repeat → tap submit
+- **Open an app**: screenshot → global_action "home" → screenshot → find & click the app icon → screenshot
+- **Search within an app**: screenshot → click the search icon/bar → screenshot → type query → screenshot
+- **Navigate back**: `ui_global_action` "back" → screenshot
+- **Scroll to find content**: screenshot → `ui_swipe` from center-bottom to center-top → screenshot → repeat if needed
+- **Fill a form**: screenshot → tap field → screenshot → `ui_type_text` → screenshot → tap next field → ...
 
 ## Important
 - Coordinates are in screen pixels. Use `centerX`/`centerY` from `ui_find_elements` results.
 - Prefer clicking buttons by their text label or content description over raw coordinates.
-- After navigation or taps, wait briefly then screenshot — screens may take a moment to transition.
 - The `run_shell_command` sandbox is Alpine Linux, NOT the Android system. Never use `am`, `input`, `monkey`, or `dumpsys` there — use `ui_*` tools instead.
 ''';
 
