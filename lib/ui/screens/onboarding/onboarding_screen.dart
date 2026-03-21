@@ -262,10 +262,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   else
                     const Center(child: Text('Select a provider first')),
 
-                  // 3 (Android only): Accessibility Service permission
+                  // 3 (Android only): Accessibility Service + Overlay permissions
                   if (Platform.isAndroid)
                     AccessibilityPage(
                       service: ref.read(uiAutomationServiceProvider),
+                      overlayService: ref.read(overlayServiceProvider),
                       onContinue: _nextPage,
                       onSkip: _nextPage,
                     ),
