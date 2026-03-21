@@ -146,90 +146,156 @@ class AgentLoop {
     var toolCallsExecuted = 0;
     UsageInfo? totalUsage;
     var loopMessages = List<LlmMessage>.from(messages);
-    var maxIter = maxToolIterations;
+    var continuationRound = 0;
+    const maxContinuations = 2; // up to 3 rounds × maxToolIterations total
 
-    while (maxIter-- > 0) {
-      final request = LlmRequest(
-        model: modelEntry.model,
-        apiKey: configManager.config.resolveApiKey(modelEntry),
-        apiBase: configManager.config.resolveApiBase(modelEntry),
-        messages: loopMessages,
-        tools: tools.isNotEmpty ? tools : null,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        timeoutSeconds: modelEntry.requestTimeout,
-        supportsVision: modelEntry.supportsVision,
-      );
+    continuation: while (true) {
+      var maxIter = maxToolIterations;
 
-      LlmResponse response;
-      try {
-        response = await providerRouter.chatCompletion(request);
-      } catch (e, st) {
-        _log.severe('LLM chatCompletion failed', e, st);
-        final parsed = parseLlmError(e);
+      while (maxIter-- > 0) {
+        final request = LlmRequest(
+          model: modelEntry.model,
+          apiKey: configManager.config.resolveApiKey(modelEntry),
+          apiBase: configManager.config.resolveApiBase(modelEntry),
+          messages: loopMessages,
+          tools: tools.isNotEmpty ? tools : null,
+          maxTokens: maxTokens,
+          temperature: temperature,
+          timeoutSeconds: modelEntry.requestTimeout,
+          supportsVision: modelEntry.supportsVision,
+        );
+
+        LlmResponse response;
+        try {
+          response = await providerRouter.chatCompletion(request);
+        } catch (e, st) {
+          _log.severe('LLM chatCompletion failed', e, st);
+          final parsed = parseLlmError(e);
+          await sessionManager.addMessage(
+            sessionKey,
+            LlmMessage(
+              role: 'assistant',
+              content: parsed.friendlyMessage,
+              metadata: {'error': true, if (parsed.statusCode != null) 'errorStatusCode': parsed.statusCode},
+            ),
+          );
+          return AgentResponse(
+            content: parsed.friendlyMessage,
+            toolCallsExecuted: toolCallsExecuted,
+            usage: totalUsage,
+            sessionKey: sessionKey,
+            errorStatusCode: parsed.statusCode,
+          );
+        }
+
+        if (response.usage != null) {
+          totalUsage = _mergeUsage(totalUsage, response.usage!);
+          await sessionManager.updateTokens(sessionKey, response.usage!);
+        }
+
+        if (response.toolCalls != null && response.toolCalls!.isNotEmpty) {
+          // Persist assistant message with tool calls
+          final assistantMsg = LlmMessage(
+            role: 'assistant',
+            content: response.content ?? '',
+            toolCalls: response.toolCalls,
+          );
+          await sessionManager.addMessage(sessionKey, assistantMsg);
+          loopMessages.add(assistantMsg);
+
+          for (final tc in response.toolCalls!) {
+            final args = _parseToolArgs(tc.function.arguments);
+            final result = await toolRegistry.execute(tc.function.name, args);
+            toolCallsExecuted++;
+
+            // Persist tool result
+            final toolMsg = LlmMessage(
+              role: 'tool',
+              content: result.content,
+              toolCallId: tc.id,
+              name: tc.function.name,
+            );
+            await sessionManager.addMessage(sessionKey, toolMsg);
+            loopMessages.add(toolMsg);
+          }
+          continue;
+        }
+
+        // Final assistant response (no tool calls) — task complete
+        final content = response.content ?? '';
         await sessionManager.addMessage(
           sessionKey,
-          LlmMessage(
-            role: 'assistant',
-            content: parsed.friendlyMessage,
-            metadata: {'error': true, if (parsed.statusCode != null) 'errorStatusCode': parsed.statusCode},
-          ),
+          LlmMessage(role: 'assistant', content: content),
         );
+
         return AgentResponse(
-          content: parsed.friendlyMessage,
+          content: content,
           toolCallsExecuted: toolCallsExecuted,
           usage: totalUsage,
           sessionKey: sessionKey,
-          errorStatusCode: parsed.statusCode,
         );
       }
 
-      if (response.usage != null) {
-        totalUsage = _mergeUsage(totalUsage, response.usage!);
-        await sessionManager.updateTokens(sessionKey, response.usage!);
-      }
-
-      if (response.toolCalls != null && response.toolCalls!.isNotEmpty) {
-        // Persist assistant message with tool calls
-        final assistantMsg = LlmMessage(
-          role: 'assistant',
-          content: response.content ?? '',
-          toolCalls: response.toolCalls,
+      // Inner loop exhausted. If mid-task and rounds remain, auto-continue
+      // by resetting the iteration budget (the transcript carries full context).
+      if (loopMessages.isNotEmpty &&
+          loopMessages.last.role == 'tool' &&
+          continuationRound < maxContinuations) {
+        continuationRound++;
+        _log.info(
+          'AgentLoop: auto-continuing (round $continuationRound/$maxContinuations, '
+          '$toolCallsExecuted calls so far)',
         );
-        await sessionManager.addMessage(sessionKey, assistantMsg);
-        loopMessages.add(assistantMsg);
-
-        for (final tc in response.toolCalls!) {
-          final args = _parseToolArgs(tc.function.arguments);
-          final result = await toolRegistry.execute(tc.function.name, args);
-          toolCallsExecuted++;
-
-          // Persist tool result
-          final toolMsg = LlmMessage(
-            role: 'tool',
-            content: result.content,
-            toolCallId: tc.id,
-            name: tc.function.name,
-          );
-          await sessionManager.addMessage(sessionKey, toolMsg);
-          loopMessages.add(toolMsg);
-        }
-        continue;
+        final contMsg = LlmMessage(
+          role: 'user',
+          content: '[Auto-continuing ($continuationRound/$maxContinuations). Resume the task.]',
+        );
+        await sessionManager.addMessage(sessionKey, contMsg);
+        loopMessages.add(contMsg);
+        continue continuation;
       }
 
-      // Final assistant response (no tool calls)
-      final content = response.content ?? '';
-      await sessionManager.addMessage(
-        sessionKey,
-        LlmMessage(role: 'assistant', content: content),
-      );
+      break continuation;
+    }
 
-      return AgentResponse(
-        content: content,
-        toolCallsExecuted: toolCallsExecuted,
-        usage: totalUsage,
-        sessionKey: sessionKey,
+    // All continuation rounds exhausted while still mid-task: make one final
+    // call without tools so the agent can summarize and tell the user to continue.
+    if (loopMessages.isNotEmpty && loopMessages.last.role == 'tool') {
+      final limitMsg = LlmMessage(
+        role: 'user',
+        content: '[Tool call limit reached after $toolCallsExecuted calls total '
+            '(${1 + maxContinuations} rounds). Summarize what you accomplished, '
+            'what still needs to be done, and tell the user they can ask you to continue.]',
       );
+      await sessionManager.addMessage(sessionKey, limitMsg);
+      loopMessages.add(limitMsg);
+      try {
+        final gracefulReq = LlmRequest(
+          model: modelEntry.model,
+          apiKey: configManager.config.resolveApiKey(modelEntry),
+          apiBase: configManager.config.resolveApiBase(modelEntry),
+          messages: loopMessages,
+          tools: null,
+          maxTokens: maxTokens,
+          temperature: temperature,
+          timeoutSeconds: modelEntry.requestTimeout,
+          supportsVision: modelEntry.supportsVision,
+        );
+        final gracefulResp = await providerRouter.chatCompletion(gracefulReq);
+        final gracefulContent = gracefulResp.content ?? '';
+        await sessionManager.addMessage(
+          sessionKey,
+          LlmMessage(role: 'assistant', content: gracefulContent),
+        );
+        return AgentResponse(
+          content: gracefulContent,
+          toolCallsExecuted: toolCallsExecuted,
+          usage: totalUsage,
+          sessionKey: sessionKey,
+        );
+      } catch (_) {
+        // Graceful call failed — fall through to return last known content
+      }
     }
 
     final lastAssistant = loopMessages.lastWhere(
@@ -321,135 +387,200 @@ class AgentLoop {
     var toolCallsExecuted = 0;
     UsageInfo? totalUsage;
     var loopMessages = List<LlmMessage>.from(messages);
-    var maxIter = maxToolIterations;
     var contentBuffer = '';
+    var continuationRound = 0;
+    const maxContinuations = 2; // up to 3 rounds × maxToolIterations total
 
-    while (maxIter-- > 0) {
-      contentBuffer = '';
-      final request = LlmRequest(
-        model: modelEntry.model,
-        apiKey: configManager.config.resolveApiKey(modelEntry),
-        apiBase: configManager.config.resolveApiBase(modelEntry),
-        messages: loopMessages,
-        tools: tools.isNotEmpty ? tools : null,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        timeoutSeconds: modelEntry.requestTimeout,
-        supportsVision: modelEntry.supportsVision,
-      );
+    continuation: while (true) {
+      var maxIter = maxToolIterations;
 
-      final toolCallsBuffer = <ToolCall>[];
+      while (maxIter-- > 0) {
+        contentBuffer = '';
+        final request = LlmRequest(
+          model: modelEntry.model,
+          apiKey: configManager.config.resolveApiKey(modelEntry),
+          apiBase: configManager.config.resolveApiBase(modelEntry),
+          messages: loopMessages,
+          tools: tools.isNotEmpty ? tools : null,
+          maxTokens: maxTokens,
+          temperature: temperature,
+          timeoutSeconds: modelEntry.requestTimeout,
+          supportsVision: modelEntry.supportsVision,
+        );
 
-      try {
-        await for (final event in providerRouter.chatCompletionStream(
-          request,
-        )) {
-          if (event.contentDelta != null) {
-            contentBuffer += event.contentDelta!;
-            yield AgentStreamEvent(textDelta: event.contentDelta);
+        final toolCallsBuffer = <ToolCall>[];
+
+        try {
+          await for (final event in providerRouter.chatCompletionStream(
+            request,
+          )) {
+            if (event.contentDelta != null) {
+              contentBuffer += event.contentDelta!;
+              yield AgentStreamEvent(textDelta: event.contentDelta);
+            }
+            if (event.toolCallDelta != null) {
+              toolCallsBuffer.add(event.toolCallDelta!);
+            }
+            if (event.usage != null) {
+              totalUsage = _mergeUsage(totalUsage, event.usage!);
+            }
           }
-          if (event.toolCallDelta != null) {
-            toolCallsBuffer.add(event.toolCallDelta!);
-          }
-          if (event.usage != null) {
-            totalUsage = _mergeUsage(totalUsage, event.usage!);
-          }
+        } catch (e, st) {
+          _log.severe('LLM stream failed', e, st);
+          final parsed = parseLlmError(e);
+          await sessionManager.addMessage(
+            sessionKey,
+            LlmMessage(
+              role: 'assistant',
+              content: parsed.friendlyMessage,
+              metadata: {'error': true, if (parsed.statusCode != null) 'errorStatusCode': parsed.statusCode},
+            ),
+          );
+          yield AgentStreamEvent(
+            isDone: true,
+            finalResponse: AgentResponse(
+              content: parsed.friendlyMessage,
+              toolCallsExecuted: toolCallsExecuted,
+              usage: totalUsage,
+              sessionKey: sessionKey,
+              errorStatusCode: parsed.statusCode,
+            ),
+          );
+          return;
         }
-      } catch (e, st) {
-        _log.severe('LLM stream failed', e, st);
-        final parsed = parseLlmError(e);
+
+        if (totalUsage != null) {
+          await sessionManager.updateTokens(sessionKey, totalUsage);
+        }
+
+        if (toolCallsBuffer.isNotEmpty) {
+          // Persist assistant message with tool calls
+          final assistantMsg = LlmMessage(
+            role: 'assistant',
+            content: contentBuffer,
+            toolCalls: toolCallsBuffer,
+          );
+          await sessionManager.addMessage(sessionKey, assistantMsg);
+          loopMessages.add(assistantMsg);
+
+          for (final tc in toolCallsBuffer) {
+            final args = _parseToolArgs(tc.function.arguments);
+            yield AgentStreamEvent(toolName: tc.function.name, toolArgs: args);
+
+            // Use streaming execution when the tool supports it so incremental
+            // output is shown in the expandable tool card as it arrives.
+            final StreamController<AgentStreamEvent> chunkCtrl =
+                StreamController<AgentStreamEvent>();
+            final chunkFuture = Stream.fromFuture(
+              toolRegistry.executeWithProgress(
+                tc.function.name,
+                args,
+                onChunk: (chunk) => chunkCtrl.add(
+                  AgentStreamEvent(toolResultChunk: chunk),
+                ),
+              ),
+            ).first.then((result) {
+              chunkCtrl.close();
+              return result;
+            });
+
+            await for (final chunkEvent in chunkCtrl.stream) {
+              yield chunkEvent;
+            }
+            final result = await chunkFuture;
+            toolCallsExecuted++;
+            yield AgentStreamEvent(toolResult: result.content);
+
+            // Persist tool result
+            final toolMsg = LlmMessage(
+              role: 'tool',
+              content: result.content,
+              toolCallId: tc.id,
+              name: tc.function.name,
+            );
+            await sessionManager.addMessage(sessionKey, toolMsg);
+            loopMessages.add(toolMsg);
+          }
+          continue;
+        }
+
+        // Final assistant response (no tool calls) — task complete
         await sessionManager.addMessage(
           sessionKey,
-          LlmMessage(
-            role: 'assistant',
-            content: parsed.friendlyMessage,
-            metadata: {'error': true, if (parsed.statusCode != null) 'errorStatusCode': parsed.statusCode},
-          ),
+          LlmMessage(role: 'assistant', content: contentBuffer),
         );
+
         yield AgentStreamEvent(
           isDone: true,
           finalResponse: AgentResponse(
-            content: parsed.friendlyMessage,
+            content: contentBuffer,
             toolCallsExecuted: toolCallsExecuted,
             usage: totalUsage,
             sessionKey: sessionKey,
-            errorStatusCode: parsed.statusCode,
           ),
         );
         return;
       }
 
-      if (totalUsage != null) {
-        await sessionManager.updateTokens(sessionKey, totalUsage);
-      }
-
-      if (toolCallsBuffer.isNotEmpty) {
-        // Persist assistant message with tool calls
-        final assistantMsg = LlmMessage(
-          role: 'assistant',
-          content: contentBuffer,
-          toolCalls: toolCallsBuffer,
+      // Inner loop exhausted. If mid-task and rounds remain, auto-continue
+      // by resetting the iteration budget (the transcript carries full context).
+      if (loopMessages.isNotEmpty &&
+          loopMessages.last.role == 'tool' &&
+          continuationRound < maxContinuations) {
+        continuationRound++;
+        _log.info(
+          'AgentLoop: auto-continuing (round $continuationRound/$maxContinuations, '
+          '$toolCallsExecuted calls so far)',
         );
-        await sessionManager.addMessage(sessionKey, assistantMsg);
-        loopMessages.add(assistantMsg);
-
-        for (final tc in toolCallsBuffer) {
-          final args = _parseToolArgs(tc.function.arguments);
-          yield AgentStreamEvent(toolName: tc.function.name, toolArgs: args);
-
-          // Use streaming execution when the tool supports it so incremental
-          // output is shown in the expandable tool card as it arrives.
-          final StreamController<AgentStreamEvent> chunkCtrl =
-              StreamController<AgentStreamEvent>();
-          final chunkFuture = Stream.fromFuture(
-            toolRegistry.executeWithProgress(
-              tc.function.name,
-              args,
-              onChunk: (chunk) => chunkCtrl.add(
-                AgentStreamEvent(toolResultChunk: chunk),
-              ),
-            ),
-          ).first.then((result) {
-            chunkCtrl.close();
-            return result;
-          });
-
-          await for (final chunkEvent in chunkCtrl.stream) {
-            yield chunkEvent;
-          }
-          final result = await chunkFuture;
-          toolCallsExecuted++;
-          yield AgentStreamEvent(toolResult: result.content);
-
-          // Persist tool result
-          final toolMsg = LlmMessage(
-            role: 'tool',
-            content: result.content,
-            toolCallId: tc.id,
-            name: tc.function.name,
-          );
-          await sessionManager.addMessage(sessionKey, toolMsg);
-          loopMessages.add(toolMsg);
-        }
-        continue;
+        final contMsg = LlmMessage(
+          role: 'user',
+          content: '[Auto-continuing ($continuationRound/$maxContinuations). Resume the task.]',
+        );
+        await sessionManager.addMessage(sessionKey, contMsg);
+        loopMessages.add(contMsg);
+        continue continuation;
       }
 
-      // Final assistant response
-      await sessionManager.addMessage(
-        sessionKey,
-        LlmMessage(role: 'assistant', content: contentBuffer),
-      );
+      break continuation;
+    }
 
-      yield AgentStreamEvent(
-        isDone: true,
-        finalResponse: AgentResponse(
-          content: contentBuffer,
-          toolCallsExecuted: toolCallsExecuted,
-          usage: totalUsage,
-          sessionKey: sessionKey,
-        ),
+    // All continuation rounds exhausted while still mid-task: stream one final
+    // call without tools so the agent can summarize and tell the user to continue.
+    if (loopMessages.isNotEmpty && loopMessages.last.role == 'tool') {
+      final limitMsg = LlmMessage(
+        role: 'user',
+        content: '[Tool call limit reached after $toolCallsExecuted calls total '
+            '(${1 + maxContinuations} rounds). Summarize what you accomplished, '
+            'what still needs to be done, and tell the user they can ask you to continue.]',
       );
-      return;
+      await sessionManager.addMessage(sessionKey, limitMsg);
+      loopMessages.add(limitMsg);
+      try {
+        final gracefulReq = LlmRequest(
+          model: modelEntry.model,
+          apiKey: configManager.config.resolveApiKey(modelEntry),
+          apiBase: configManager.config.resolveApiBase(modelEntry),
+          messages: loopMessages,
+          tools: null,
+          maxTokens: maxTokens,
+          temperature: temperature,
+          timeoutSeconds: modelEntry.requestTimeout,
+          supportsVision: modelEntry.supportsVision,
+        );
+        contentBuffer = '';
+        await for (final event in providerRouter.chatCompletionStream(gracefulReq)) {
+          if (event.contentDelta != null) {
+            contentBuffer += event.contentDelta!;
+            yield AgentStreamEvent(textDelta: event.contentDelta);
+          }
+        }
+        await sessionManager.addMessage(
+          sessionKey,
+          LlmMessage(role: 'assistant', content: contentBuffer),
+        );
+      } catch (_) {
+        // Graceful stream failed — fall through to emit isDone with last buffer
+      }
     }
 
     yield AgentStreamEvent(

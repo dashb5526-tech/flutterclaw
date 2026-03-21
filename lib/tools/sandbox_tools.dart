@@ -22,6 +22,10 @@ class RunShellCommandTool extends Tool {
   @override
   String get description =>
       'Execute a shell command in a sandboxed Linux (Alpine 3.21) environment.\n\n'
+      'IMPORTANT: This is an isolated Alpine Linux sandbox — NOT Android\'s shell.\n'
+      'Android system commands (am, input, monkey, dumpsys, adb, getprop, etc.) do NOT exist here.\n'
+      'For Android UI automation (tap, swipe, type text, screenshot, find elements), use the ui_* tools instead:\n'
+      '  ui_tap, ui_swipe, ui_type_text, ui_find_elements, ui_click_element, ui_screenshot, ui_global_action\n\n'
       '=== ANDROID ===\n'
       'Runs in a PRoot sandbox (Alpine ARM64, native speed).\n'
       '`apk add <pkg>` downloads and installs at runtime — e.g. `apk add python3`, `apk add nodejs`.\n'

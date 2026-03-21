@@ -35,7 +35,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   // Gateway and channels use defaults; users configure them later in Settings.
   // Pages: 0=Welcome, 1=Provider, 2=Auth, 3=Accessibility(Android only), 3/4=Completion
-  int get _pageCount => Platform.isAndroid ? 4 : 3;
+  int get _pageCount => Platform.isAndroid ? 5 : 4;
 
   bool get _canAdvance {
     switch (_currentPage) {

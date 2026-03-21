@@ -95,7 +95,7 @@ class AgentsDefaults {
     this.modelName = 'gpt-4o',
     this.maxTokens = 8192,
     this.temperature = 0.7,
-    this.maxToolIterations = 20,
+    this.maxToolIterations = 40,
     this.restrictToWorkspace = true,
   });
 

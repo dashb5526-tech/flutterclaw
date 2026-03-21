@@ -63,7 +63,7 @@ class AgentProfile {
     required this.modelName,
     this.temperature = 0.7,
     this.maxTokens = 8192,
-    this.maxToolIterations = 20,
+    this.maxToolIterations = 40,
     this.restrictToWorkspace = true,
     this.vibe,
     this.systemPromptOverride,

@@ -252,7 +252,9 @@ class OpenAiProvider implements LlmProvider {
   }) {
     final map = <String, dynamic>{
       'role': m.role,
-      'content': _convertContent(m.content, apiBase: apiBase, stripImages: stripImages),
+      'content': m.role == 'tool' && m.content is String
+          ? _convertToolContent(m.content as String, stripImages: stripImages)
+          : _convertContent(m.content, apiBase: apiBase, stripImages: stripImages),
     };
     if (m.name != null) map['name'] = m.name;
     if (m.toolCalls != null) {
@@ -260,6 +262,43 @@ class OpenAiProvider implements LlmProvider {
     }
     if (m.toolCallId != null) map['tool_call_id'] = m.toolCallId;
     return map;
+  }
+
+  /// Converts tool result content for OpenAI format.
+  ///
+  /// Detects JSON-encoded image blocks (from ui_screenshot) and converts them
+  /// to an OpenAI content array with an image_url block so vision models can
+  /// see the screenshot. When stripImages is true, returns a text placeholder.
+  /// Falls through to plain string for non-image content.
+  dynamic _convertToolContent(String content, {bool stripImages = false}) {
+    if (content.contains('"type":"image"') ||
+        content.contains('"type": "image"')) {
+      try {
+        final parsed = jsonDecode(content);
+        if (parsed is Map<String, dynamic> &&
+            parsed['type'] == 'image' &&
+            parsed.containsKey('data') &&
+            parsed.containsKey('mimeType')) {
+          if (stripImages) {
+            final note = parsed['note'] as String?;
+            return '[Screenshot captured]${note != null ? ' $note' : ''}';
+          }
+          final blocks = <Map<String, dynamic>>[
+            {
+              'type': 'image_url',
+              'image_url': {
+                'url': 'data:${parsed['mimeType']};base64,${parsed['data']}',
+              },
+            },
+          ];
+          if (parsed['note'] != null) {
+            blocks.add({'type': 'text', 'text': parsed['note'] as String});
+          }
+          return blocks;
+        }
+      } catch (_) {}
+    }
+    return content;
   }
 
   /// Converts content to OpenAI format.
