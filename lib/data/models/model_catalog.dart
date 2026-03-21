@@ -101,11 +101,11 @@ class ModelCatalog {
     CatalogProvider(
       id: 'groq',
       displayName: 'Groq',
-      description: 'Groq.com — ultra-fast inference for Llama, Mixtral. Not related to xAI Grok.',
+      description:
+          'GroqCloud — fast Llama inference. Model IDs: console.groq.com/docs/models. Not xAI Grok.',
       icon: Icons.flash_on,
       signupUrl: 'https://console.groq.com/keys',
       apiBase: 'https://api.groq.com/openai/v1',
-      hasFreeModels: true,
     ),
     CatalogProvider(
       id: 'ollama',
@@ -305,23 +305,23 @@ class ModelCatalog {
       input: ['text'],
     ),
 
-    // Groq (OpenAI-compatible, ultra-fast)
+    // Groq (OpenAI-compatible, ultra-fast) — model IDs: console.groq.com/docs/models
     CatalogModel(
       id: 'llama-3.3-70b-versatile',
       displayName: 'Llama 3.3 70B',
       providerId: 'groq',
-      isFree: true,
+      isFree: false,
       contextWindow: 131072,
-      description: 'Meta Llama — production model (console.groq.com/docs/models)',
+      description: 'Meta Llama — production (Groq production table)',
       input: ['text'],
     ),
     CatalogModel(
       id: 'llama-3.1-8b-instant',
       displayName: 'Llama 3.1 8B (instant)',
       providerId: 'groq',
-      isFree: true,
+      isFree: false,
       contextWindow: 131072,
-      description: 'Smallest Llama — production (console.groq.com/docs/models)',
+      description: 'Meta Llama — smaller & faster production tier (Groq docs)',
       input: ['text'],
     ),
     CatalogModel(
