@@ -271,24 +271,44 @@ class _UnifiedAgentsScreenState extends ConsumerState<UnifiedAgentsScreen> {
           padding: const EdgeInsets.all(20),
           child: Row(
             children: [
-              // Agent emoji with gradient background
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [colors.primary, colors.tertiary],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              // Agent emoji with gradient background + active badge
+              Stack(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [colors.primary, colors.tertiary],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Center(
+                      child: Text(
+                        activeAgent.emoji,
+                        style: const TextStyle(fontSize: 36),
+                      ),
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Text(
-                    activeAgent.emoji,
-                    style: const TextStyle(fontSize: 36),
+                  Positioned(
+                    right: 2,
+                    bottom: 2,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade500,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: colors.surface,
+                          width: 2,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
               const SizedBox(width: 16),
               // Agent info
@@ -343,43 +363,9 @@ class _UnifiedAgentsScreenState extends ConsumerState<UnifiedAgentsScreen> {
                   ],
                 ),
               ),
-              // Indicator
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.primaryContainer.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.circle,
-                          size: 8,
-                          color: Colors.green.shade600,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          context.l10n.active,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.unfold_more,
-                    color: colors.onSurfaceVariant,
-                  ),
-                ],
+              Icon(
+                Icons.unfold_more,
+                color: colors.onSurfaceVariant,
               ),
             ],
           ),
