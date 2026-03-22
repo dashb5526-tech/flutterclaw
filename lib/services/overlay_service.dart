@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 
 final _log = Logger('flutterclaw.overlay');
@@ -85,8 +86,12 @@ class OverlayService {
 
   // ─── Mode A: Status pill ───────────────────────────────────────────────────
 
+  static bool get _isAppInForeground =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
   Future<void> show(String text) async {
     if (!Platform.isAndroid) return;
+    if (_isAppInForeground) return;
     try {
       _log.info('show("$text") -> invoking platform channel');
       final result =
@@ -109,6 +114,7 @@ class OverlayService {
   /// Show a brief "Done" state with a green checkmark, auto-hides after 2s.
   Future<void> showDone() async {
     if (!Platform.isAndroid) return;
+    if (_isAppInForeground) return;
     try {
       await _channel
           .invokeMethod<bool>('overlay_show_done', {'text': 'Done'});
@@ -131,6 +137,7 @@ class OverlayService {
     Duration timeout = const Duration(seconds: 60),
   }) async {
     if (!Platform.isAndroid) return 'dismissed';
+    if (_isAppInForeground) return 'dismissed';
 
     final requestId = 'msg_${++_requestCounter}';
 

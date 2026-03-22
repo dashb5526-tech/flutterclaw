@@ -296,33 +296,30 @@ class _UnifiedAgentsScreenState extends ConsumerState<UnifiedAgentsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(
+                      activeAgent.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        // Constrain the agent name so it cannot overflow the row
-                        // when the available width is tight.
-                        Flexible(
-                          child: Text(
-                            activeAgent.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
                         if (activeAgent.isDefault) ...[
-                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
+                              horizontal: 6,
+                              vertical: 1,
                             ),
+                            margin: const EdgeInsets.only(right: 8),
                             decoration: BoxDecoration(
                               color: colors.primaryContainer,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              'Default',
+                              context.l10n.defaultBadge,
                               style: TextStyle(
                                 color: colors.primary,
                                 fontSize: 10,
@@ -331,14 +328,17 @@ class _UnifiedAgentsScreenState extends ConsumerState<UnifiedAgentsScreen> {
                             ),
                           ),
                         ],
+                        Flexible(
+                          child: Text(
+                            '${activeAgent.modelName} • ${activeAgent.vibe ?? "AI Assistant"}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
                       ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${activeAgent.modelName} • ${activeAgent.vibe ?? "AI Assistant"}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
                     ),
                   ],
                 ),
@@ -1926,14 +1926,20 @@ class _AgentQuickButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 20),
           const SizedBox(height: 3),
-          Text(label, style: const TextStyle(fontSize: 11)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
