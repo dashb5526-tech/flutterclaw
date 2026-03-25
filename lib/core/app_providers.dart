@@ -467,8 +467,9 @@ final toolRegistryProvider = Provider<ToolRegistry>((ref) {
   final sandboxSvc = ref.read(sandboxServiceProvider);
   registry.register(RunShellCommandTool(sandboxSvc));
 
-  // Skill management tools (install from ClawHub, create, list, remove)
+  // Skill management tools (search/install from ClawHub, create, list, remove)
   final skillsSvc = ref.read(skillsServiceProvider);
+  registry.register(SkillSearchTool(skillsService: skillsSvc));
   registry.register(SkillInstallTool(skillsService: skillsSvc));
   registry.register(SkillCreateTool(skillsService: skillsSvc));
   registry.register(SkillListTool(skillsService: skillsSvc));

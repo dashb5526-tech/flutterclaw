@@ -80,6 +80,71 @@ class _PendingInstall {
 final Map<String, _PendingInstall> _pendingInstalls = {};
 
 // ---------------------------------------------------------------------------
+// skill_search
+// ---------------------------------------------------------------------------
+
+class SkillSearchTool extends Tool {
+  final SkillsService skillsService;
+
+  SkillSearchTool({required this.skillsService});
+
+  @override
+  String get name => 'skill_search';
+
+  @override
+  String get description =>
+      'Search ClawHub for available skills to install. '
+      'Returns a list of matching skills with name, description, author, '
+      'emoji, downloads, and stars.\n\n'
+      'Parameters:\n'
+      '- query (required): Search query, e.g. "web search", "email", "calendar"';
+
+  @override
+  Map<String, dynamic> get parameters => {
+        'type': 'object',
+        'properties': {
+          'query': {
+            'type': 'string',
+            'description': 'Search query',
+          },
+        },
+        'required': ['query'],
+      };
+
+  @override
+  Future<ToolResult> execute(Map<String, dynamic> args) async {
+    final query = (args['query'] as String? ?? '').trim();
+    if (query.isEmpty) return ToolResult.error('query is required');
+
+    final results = await skillsService.searchClawHub(query);
+
+    if (results.isEmpty) {
+      return ToolResult.success(jsonEncode({
+        'skills': [],
+        'message': 'No skills found for "$query". Try a different search term.',
+      }));
+    }
+
+    return ToolResult.success(jsonEncode({
+      'skills': results
+          .map((s) => {
+                'slug': s.name,
+                'description': s.description,
+                if (s.author != null) 'author': s.author,
+                if (s.emoji != null) 'emoji': s.emoji,
+                if (s.version != null) 'version': s.version,
+                'downloads': s.downloads,
+                'stars': s.stars,
+                'install_url': 'https://clawhub.ai/${s.name}',
+              })
+          .toList(),
+      'total': results.length,
+      'tip': 'Use skill_install(url: install_url) to install any of these skills.',
+    }));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // skill_install
 // ---------------------------------------------------------------------------
 
