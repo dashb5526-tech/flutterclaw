@@ -27,6 +27,7 @@ class LiveActivityService {
   }) async {
     try {
       await _ensureInitialized();
+      await _plugin.endAllActivities();
       final data = _buildData(
         host: host,
         port: port,
@@ -54,6 +55,7 @@ class LiveActivityService {
   }) async {
     try {
       await _ensureInitialized();
+      await _plugin.endAllActivities();
       final data = _buildData(
         host: host,
         port: port,

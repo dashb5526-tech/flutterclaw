@@ -7,6 +7,7 @@ import 'package:flutterclaw/app.dart';
 import 'package:flutterclaw/firebase_options.dart';
 import 'package:flutterclaw/services/audio_player_service.dart';
 import 'package:flutterclaw/services/background_service.dart';
+import 'package:flutterclaw/services/live_activity_service.dart';
 import 'package:logging/logging.dart';
 
 void main() async {
@@ -39,6 +40,10 @@ void main() async {
       // ignore: avoid_print
       print('⚠️ audio_service init failed (background audio unavailable): $e');
     }
+    // End any stale Live Activities left over from a previous session (force-close,
+    // crash, etc.). The iOS gateway runs in-process, so if the app was killed the
+    // gateway is definitely not running — it's always safe to clear here.
+    await LiveActivityService.endAllActivities();
   }
 
   // Only initialize flutter_foreground_task on Android
