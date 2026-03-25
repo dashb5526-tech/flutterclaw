@@ -723,6 +723,14 @@ class _ProvidersModelsScreenState extends ConsumerState<ProvidersModelsScreen> {
 
     await configManager.save();
 
+    // Sync Live Activity model if gateway is running and agents were updated
+    if (updateAgents) {
+      final gatewayState = ref.read(gatewayStateProvider);
+      if (gatewayState.isRunning) {
+        ref.read(gatewayStateProvider.notifier).setModel(modelName);
+      }
+    }
+
     if (startNewSessions) {
       ref.read(chatProvider.notifier).clear();
     }

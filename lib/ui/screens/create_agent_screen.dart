@@ -590,6 +590,13 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
         await configManager.save();
         ref.invalidate(agentProfilesProvider);
 
+        // Sync Live Activity if this is the active agent and gateway is running
+        final activeAgent = ref.read(activeAgentProvider);
+        final gatewayState = ref.read(gatewayStateProvider);
+        if (activeAgent?.id == widget.agent!.id && gatewayState.isRunning) {
+          ref.read(gatewayStateProvider.notifier).setModel(_selectedModel!);
+        }
+
         // Keep IDENTITY.md in sync so the agent's self-identity matches the profile
         try {
           final ws = await configManager.getAgentWorkspace(widget.agent!.id);
