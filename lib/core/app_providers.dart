@@ -65,6 +65,7 @@ import 'package:flutterclaw/services/voice_recording_service.dart';
 import 'package:flutterclaw/services/audio_transcription_service.dart';
 import 'package:flutterclaw/services/overlay_service.dart';
 import 'package:flutterclaw/services/text_to_speech_service.dart';
+import 'package:flutterclaw/services/speech_to_text_service.dart';
 import 'package:flutterclaw/tools/tool_status_formatter.dart';
 
 final configManagerProvider = Provider<ConfigManager>((ref) {
@@ -979,6 +980,25 @@ final voiceRecordingServiceProvider = Provider<VoiceRecordingService>((ref) {
   ref.onDispose(svc.dispose);
   return svc;
 });
+
+/// Singleton offline speech-to-text service (iOS SFSpeechRecognizer / Android SpeechRecognizer).
+final speechToTextServiceProvider = Provider<SpeechToTextService>((ref) {
+  return SpeechToTextService();
+});
+
+/// Tracks which message text is currently being spoken by TTS (null = idle).
+/// Set to the message text when Speak is tapped; cleared when speech ends.
+final ttsSpeakingMsgProvider =
+    NotifierProvider<TtsSpeakingMsgNotifier, String?>(
+      TtsSpeakingMsgNotifier.new,
+    );
+
+class TtsSpeakingMsgNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? msg) => state = msg;
+}
 
 class ChatNotifier extends Notifier<List<ChatMessage>> {
   bool _processing = false;

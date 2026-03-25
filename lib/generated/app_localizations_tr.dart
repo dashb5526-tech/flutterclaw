@@ -1311,6 +1311,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get voiceInput => 'Sesli giriş';
 
   @override
+  String get speakMessage => 'Speak';
+
+  @override
+  String get stopSpeaking => 'Stop speaking';
+
+  @override
+  String get selectText => 'Select Text';
+
+  @override
+  String get messageCopied => 'Message copied';
+
+  @override
   String get copyTooltip => 'Kopyala';
 
   @override

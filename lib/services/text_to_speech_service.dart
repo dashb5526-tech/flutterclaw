@@ -1,9 +1,11 @@
 /// Text-to-speech service using the system TTS engine (flutter_tts).
 ///
 /// Wraps [FlutterTts] to provide a simple API for synthesizing text to an
-/// audio file. Uses the platform's built-in voices — no API key required.
+/// audio file or for direct speech playback. Uses the platform's built-in
+/// voices — no API key required.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_tts/flutter_tts.dart';
@@ -15,6 +17,10 @@ final _log = Logger('TextToSpeechService');
 class TextToSpeechService {
   final FlutterTts _tts = FlutterTts();
   bool _initialized = false;
+  bool _isSpeaking = false;
+  bool _synthesizing = false;
+
+  bool get isSpeaking => _isSpeaking;
 
   /// Initialize TTS engine with sensible defaults.
   Future<void> init() async {
@@ -26,19 +32,117 @@ class TextToSpeechService {
       await _tts.setPitch(1.0);
       if (Platform.isIOS) {
         await _tts.setSharedInstance(true);
+        // Use 'playback' category so speech plays even when the device is in
+        // silent/vibrate mode — same behaviour as navigation and Siri.
         await _tts.setIosAudioCategory(
-          IosTextToSpeechAudioCategory.ambient,
+          IosTextToSpeechAudioCategory.playback,
           [
+            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
             IosTextToSpeechAudioCategoryOptions.allowBluetooth,
             IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
           ],
         );
       }
+      // Try to select the best available neural voice for the device locale.
+      await _selectBestVoice();
       _initialized = true;
       _log.info('TTS initialized');
     } catch (e) {
       _log.warning('TTS init failed: $e');
+    }
+  }
+
+  /// Select the highest-quality available voice for the device locale.
+  ///
+  /// On iOS, Apple ships compact (robotic), Enhanced, and Premium (neural)
+  /// voices. Premium > Enhanced > default. The voice must be downloaded by
+  /// the user in Settings → Accessibility → Spoken Content → Voices; this
+  /// method picks the best one that is already available on the device.
+  Future<void> _selectBestVoice() async {
+    try {
+      final rawVoices = await _tts.getVoices;
+      if (rawVoices == null) return;
+      final voices = (rawVoices as List).cast<Map>();
+      if (voices.isEmpty) return;
+
+      // Match device locale language (e.g. 'es' from 'es_ES').
+      final deviceLang = Platform.localeName.split('_').first.toLowerCase();
+
+      // Prefer voices whose locale starts with the device language; fall
+      // back to the full list so we always pick something.
+      final candidates = voices
+          .where(
+            (v) => (v['locale'] as String? ?? '')
+                .toLowerCase()
+                .startsWith(deviceLang),
+          )
+          .toList();
+      final pool = candidates.isNotEmpty ? candidates : voices;
+
+      // Pick the highest quality: Premium > Enhanced > first available.
+      Map? best;
+      for (final quality in ['Premium', 'Enhanced']) {
+        best = pool.cast<Map?>().firstWhere(
+          (v) => (v?['name'] as String? ?? '').contains(quality),
+          orElse: () => null,
+        );
+        if (best != null) break;
+      }
+      best ??= pool.isNotEmpty ? pool.first : null;
+
+      if (best != null) {
+        final name = best['name'] as String?;
+        final locale = best['locale'] as String?;
+        if (name != null && locale != null) {
+          await _tts.setVoice({'name': name, 'locale': locale});
+          await _tts.setLanguage(locale);
+          _log.info('TTS voice selected: $name ($locale)');
+        }
+      }
+    } catch (e) {
+      _log.warning('TTS voice selection failed: $e');
+    }
+  }
+
+  /// Speak [text] aloud using the system TTS engine (direct playback).
+  ///
+  /// [onDone] is called when speech finishes naturally, is cancelled, or
+  /// encounters an error. No-op if a file synthesis is in progress.
+  Future<void> speak(String text, {void Function()? onDone}) async {
+    if (_synthesizing) {
+      _log.warning('TTS: speak() skipped — synthesizeToFile in progress');
+      return;
+    }
+    await init();
+    try {
+      _tts.setStartHandler(() => _isSpeaking = true);
+      _tts.setCompletionHandler(() {
+        _isSpeaking = false;
+        onDone?.call();
+      });
+      _tts.setCancelHandler(() {
+        _isSpeaking = false;
+        onDone?.call();
+      });
+      _tts.setErrorHandler((_) {
+        _isSpeaking = false;
+        onDone?.call();
+      });
+      await _tts.speak(text);
+    } catch (e) {
+      _isSpeaking = false;
+      onDone?.call();
+      _log.warning('TTS speak failed: $e');
+    }
+  }
+
+  /// Stop any in-progress speech.
+  Future<void> stop() async {
+    try {
+      await _tts.stop();
+      _isSpeaking = false;
+    } catch (e) {
+      _log.warning('TTS stop failed: $e');
     }
   }
 
@@ -48,13 +152,18 @@ class TextToSpeechService {
   /// The caller is responsible for deleting the file after use.
   Future<String?> synthesizeToFile(String text) async {
     await init();
+    _synthesizing = true;
     try {
       final dir = await getTemporaryDirectory();
       final path = '${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.wav';
 
-      final completer = _CompletionCompleter();
-      _tts.setCompletionHandler(() => completer.complete());
-      _tts.setErrorHandler((msg) => completer.completeError(msg));
+      final completer = Completer<void>();
+      _tts.setCompletionHandler(() {
+        if (!completer.isCompleted) completer.complete();
+      });
+      _tts.setErrorHandler((msg) {
+        if (!completer.isCompleted) completer.completeError(msg.toString());
+      });
 
       final result = await _tts.synthesizeToFile(text, path);
       if (result != 1) {
@@ -76,6 +185,8 @@ class TextToSpeechService {
     } catch (e) {
       _log.warning('TTS synthesis failed: $e');
       return null;
+    } finally {
+      _synthesizing = false;
     }
   }
 
@@ -93,37 +204,5 @@ class TextToSpeechService {
     try {
       await _tts.stop();
     } catch (_) {}
-  }
-}
-
-/// Simple completer wrapper to await TTS completion callbacks.
-class _CompletionCompleter {
-  final _c = <void Function()>[];
-  final _e = <void Function(Object)>[];
-  bool _done = false;
-  Object? _error;
-
-  void complete() {
-    _done = true;
-    for (final cb in _c) {
-      cb();
-    }
-  }
-
-  void completeError(Object err) {
-    _error = err;
-    for (final cb in _e) {
-      cb(err);
-    }
-  }
-
-  Future<void> get future async {
-    if (_done) return;
-    if (_error != null) throw _error!;
-    await Future.doWhile(() async {
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (_error != null) throw _error!;
-      return !_done;
-    });
   }
 }

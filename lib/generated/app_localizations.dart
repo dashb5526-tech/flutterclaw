@@ -2462,6 +2462,30 @@ abstract class AppLocalizations {
   /// **'Voice input'**
   String get voiceInput;
 
+  /// Context menu action: speak this message aloud
+  ///
+  /// In en, this message translates to:
+  /// **'Speak'**
+  String get speakMessage;
+
+  /// Context menu action: stop current TTS playback
+  ///
+  /// In en, this message translates to:
+  /// **'Stop speaking'**
+  String get stopSpeaking;
+
+  /// Context menu action: open text selection dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Select Text'**
+  String get selectText;
+
+  /// Snackbar shown after copying a message
+  ///
+  /// In en, this message translates to:
+  /// **'Message copied'**
+  String get messageCopied;
+
   /// Copy button tooltip
   ///
   /// In en, this message translates to:

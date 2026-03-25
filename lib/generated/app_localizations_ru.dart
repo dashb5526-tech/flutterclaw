@@ -1306,6 +1306,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get voiceInput => 'Голосовой ввод';
 
   @override
+  String get speakMessage => 'Speak';
+
+  @override
+  String get stopSpeaking => 'Stop speaking';
+
+  @override
+  String get selectText => 'Select Text';
+
+  @override
+  String get messageCopied => 'Message copied';
+
+  @override
   String get copyTooltip => 'Копировать';
 
   @override

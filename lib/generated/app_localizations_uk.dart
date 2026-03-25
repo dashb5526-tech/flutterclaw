@@ -1304,6 +1304,18 @@ class AppLocalizationsUk extends AppLocalizations {
   String get voiceInput => 'Голосове введення';
 
   @override
+  String get speakMessage => 'Speak';
+
+  @override
+  String get stopSpeaking => 'Stop speaking';
+
+  @override
+  String get selectText => 'Select Text';
+
+  @override
+  String get messageCopied => 'Message copied';
+
+  @override
   String get copyTooltip => 'Копіювати';
 
   @override

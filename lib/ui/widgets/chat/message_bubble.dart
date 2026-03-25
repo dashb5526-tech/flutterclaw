@@ -5,6 +5,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutterclaw/core/app_providers.dart';
+import 'package:flutterclaw/l10n/l10n_extension.dart';
 import 'package:flutterclaw/ui/theme/semantic_colors.dart';
 import 'copyable_code_block.dart';
 import 'terminal_output.dart';
@@ -76,37 +77,73 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ),
           ],
           Flexible(
-            child: GestureDetector(
-              onLongPress: widget.onCopy,
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75,
-                ),
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isUser
-                      ? colors.primary
-                      : colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(16),
-                    topRight: const Radius.circular(16),
-                    bottomLeft: Radius.circular(isUser ? 16 : 4),
-                    bottomRight: Radius.circular(isUser ? 4 : 16),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                GestureDetector(
+                  onLongPress: () => _showMessageContextMenu(context),
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.75,
+                    ),
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isUser
+                          ? colors.primary
+                          : colors.surfaceContainerHighest,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(16),
+                        topRight: const Radius.circular(16),
+                        bottomLeft: Radius.circular(isUser ? 16 : 4),
+                        bottomRight: Radius.circular(isUser ? 4 : 16),
+                      ),
+                    ),
+                    child: widget.message.isStreaming && widget.message.text.isEmpty
+                        ? const TypingIndicator()
+                        : isUser
+                            ? Text(
+                                widget.message.text,
+                                style: TextStyle(
+                                  color: colors.onPrimary,
+                                  fontSize: 15,
+                                ),
+                              )
+                            : _buildAssistantText(context, theme, colors),
                   ),
                 ),
-                child: widget.message.isStreaming && widget.message.text.isEmpty
-                    ? const TypingIndicator()
-                    : isUser
-                        ? SelectableText(
-                            widget.message.text,
-                            style: TextStyle(
-                              color: colors.onPrimary,
-                              fontSize: 15,
-                            ),
-                          )
-                        : _buildAssistantText(context, theme, colors),
-              ),
+                // TTS speaking indicator — shown while this message is being read
+                Consumer(
+                  builder: (ctx, ref2, _) {
+                    final speaking = ref2.watch(ttsSpeakingMsgProvider);
+                    if (speaking != widget.message.text) return const SizedBox.shrink();
+                    return Positioned(
+                      top: 0,
+                      right: isUser ? null : -10,
+                      left: isUser ? -10 : null,
+                      child: GestureDetector(
+                        onTap: () async {
+                          await ref2.read(textToSpeechServiceProvider).stop();
+                          ref2.read(ttsSpeakingMsgProvider.notifier).set(null);
+                        },
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: colors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.stop_rounded,
+                            size: 13,
+                            color: colors.onPrimary,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
           if (isUser) ...[
@@ -115,6 +152,150 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         ],
       ),
     );
+  }
+
+  void _showMessageContextMenu(BuildContext context) {
+    final msg = widget.message;
+    final colors = Theme.of(context).colorScheme;
+
+    final bool canSpeak = !msg.isToolStatus &&
+        !msg.isError &&
+        !msg.isDocumentMessage &&
+        msg.imageData == null &&
+        msg.text.trim().isNotEmpty;
+
+    final bool canSelectText = !msg.isToolStatus &&
+        !msg.isDocumentMessage &&
+        msg.imageData == null &&
+        msg.text.trim().isNotEmpty;
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Copy
+              ListTile(
+                leading: const Icon(Icons.copy_rounded),
+                title: Text(context.l10n.copyTooltip),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  widget.onCopy();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(context.l10n.messageCopied),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                },
+              ),
+
+              // Speak (text messages only)
+              if (canSpeak)
+                Consumer(
+                  builder: (ctx2, ref2, _) {
+                    final speakingMsg = ref2.watch(ttsSpeakingMsgProvider);
+                    final isThisMsg = speakingMsg == msg.text;
+                    return ListTile(
+                      leading: Icon(
+                        isThisMsg
+                            ? Icons.stop_circle_outlined
+                            : Icons.volume_up_rounded,
+                      ),
+                      title: Text(
+                        isThisMsg
+                            ? context.l10n.stopSpeaking
+                            : context.l10n.speakMessage,
+                      ),
+                      onTap: () async {
+                        // Capture ref values BEFORE pop — pop disposes the sheet's ref2
+                        final tts = ref2.read(textToSpeechServiceProvider);
+                        final notifier = ref2.read(ttsSpeakingMsgProvider.notifier);
+                        Navigator.pop(sheetCtx);
+                        if (isThisMsg) {
+                          await tts.stop();
+                          notifier.set(null);
+                        } else {
+                          await tts.stop();
+                          notifier.set(msg.text);
+                          await tts.speak(
+                            _stripMarkdown(msg.text),
+                            onDone: () {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                notifier.set(null);
+                              });
+                            },
+                          );
+                        }
+                      },
+                    );
+                  },
+                ),
+
+              // Select text
+              if (canSelectText)
+                ListTile(
+                  leading: const Icon(Icons.text_fields_rounded),
+                  title: Text(context.l10n.selectText),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    showDialog<void>(
+                      context: context,
+                      builder: (dCtx) => AlertDialog(
+                        content: SingleChildScrollView(
+                          child: SelectableText(
+                            msg.text,
+                            style: TextStyle(
+                              color: colors.onSurface,
+                              fontSize: 15,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dCtx),
+                            child: Text(context.l10n.close),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Strip markdown syntax from [text] before passing to TTS.
+  static String _stripMarkdown(String text) {
+    var s = text;
+    // Fenced code blocks → '[code block]'
+    s = s.replaceAll(RegExp(r'```[\s\S]*?```'), '[code block]');
+    // Inline code → unwrapped content
+    s = s.replaceAll(RegExp(r'`([^`]+)`'), r'$1');
+    // Headers
+    s = s.replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '');
+    // Bold / italic
+    s = s.replaceAll(RegExp(r'\*{1,2}([^*\n]+)\*{1,2}'), r'$1');
+    s = s.replaceAll(RegExp(r'_{1,2}([^_\n]+)_{1,2}'), r'$1');
+    // Links [text](url) → text
+    s = s.replaceAll(RegExp(r'\[([^\]]+)\]\([^)]*\)'), r'$1');
+    // Bare URLs
+    s = s.replaceAll(RegExp(r'https?://\S+'), 'link');
+    // List markers
+    s = s.replaceAll(RegExp(r'^\s*[-*]\s+', multiLine: true), '');
+    s = s.replaceAll(RegExp(r'^\s*\d+\.\s+', multiLine: true), '');
+    // Blockquotes
+    s = s.replaceAll(RegExp(r'^>\s*', multiLine: true), '');
+    // Collapse whitespace
+    s = s.replaceAll(RegExp(r'\n{2,}'), '. ');
+    s = s.replaceAll('\n', ' ');
+    return s.trim();
   }
 
   Widget _buildAssistantText(BuildContext context, ThemeData theme, ColorScheme colors) {
@@ -158,7 +339,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     return MarkdownBody(
       key: ValueKey(text.length),
       data: widget.message.isStreaming ? _sanitizeStreamingMarkdown(text) : text,
-      selectable: true,
+      selectable: false,
       builders: {
         'pre': CopyableCodeBlockBuilder(context),
       },
@@ -383,7 +564,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     return Align(
       alignment: Alignment.centerRight,
       child: GestureDetector(
-        onLongPress: widget.onCopy,
+        onLongPress: () => _showMessageContextMenu(context),
         child: Container(
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.85,
@@ -459,7 +640,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     return Align(
       alignment: Alignment.centerRight,
       child: GestureDetector(
-        onLongPress: widget.onCopy,
+        onLongPress: () => _showMessageContextMenu(context),
         child: Container(
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.75,
@@ -527,7 +708,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
-        onLongPress: widget.onCopy,
+        onLongPress: () => _showMessageContextMenu(context),
         child: Container(
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.72,

@@ -1999,6 +1999,18 @@
   "voiceInput": "Voice input",
   "@voiceInput": { "description": "Voice input tooltip" },
 
+  "speakMessage": "Speak",
+  "@speakMessage": { "description": "Context menu action: speak this message aloud" },
+
+  "stopSpeaking": "Stop speaking",
+  "@stopSpeaking": { "description": "Context menu action: stop current TTS playback" },
+
+  "selectText": "Select Text",
+  "@selectText": { "description": "Context menu action: open text selection dialog" },
+
+  "messageCopied": "Message copied",
+  "@messageCopied": { "description": "Snackbar shown after copying a message" },
+
   "copyTooltip": "Copy",
   "@copyTooltip": { "description": "Copy button tooltip" },
 

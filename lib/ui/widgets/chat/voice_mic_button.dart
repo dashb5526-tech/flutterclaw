@@ -4,7 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterclaw/core/app_providers.dart';
 import 'package:flutterclaw/l10n/l10n_extension.dart';
 
-/// Microphone button in the chat input bar. Tap to start/stop recording; auto-transcribes on stop.
+/// Microphone button in the chat input bar.
+///
+/// Tap to start offline speech recognition; partial results are shown live
+/// in the button's tooltip. Tap again (or wait for silence) to stop — the
+/// final recognised text is sent as a chat message.
+///
+/// Uses the OS speech recogniser (iOS SFSpeechRecognizer / Android
+/// SpeechRecognizer) — no API key or network call required.
 class VoiceMicButton extends ConsumerStatefulWidget {
   const VoiceMicButton({super.key});
 
@@ -13,49 +20,78 @@ class VoiceMicButton extends ConsumerStatefulWidget {
 }
 
 class _VoiceMicButtonState extends ConsumerState<VoiceMicButton> {
-  bool _transcribing = false;
+  bool _listening = false;
+  bool _initializing = false;
+  String _liveText = '';
 
   Future<void> _toggle() async {
-    final svc = ref.read(voiceRecordingServiceProvider);
+    final stt = ref.read(speechToTextServiceProvider);
 
-    if (svc.isRecording) {
-      final path = await svc.stop();
-      if (path == null || !mounted) return;
-      setState(() => _transcribing = true);
+    if (_listening) {
+      // Stop: request final result from the engine.
+      // The onResult(isFinal=true) callback will send the message.
+      await stt.stopListening();
       HapticFeedback.lightImpact();
-      final ok = await ref.read(chatProvider.notifier).transcribeAndSend(path);
-      if (!ok && mounted) {
+      if (mounted) setState(() { _listening = false; _liveText = ''; });
+      return;
+    }
+
+    // Start: initialise (requests permission on first call).
+    if (mounted) setState(() => _initializing = true);
+    final available = await stt.initialize();
+
+    if (!available) {
+      if (mounted) {
+        setState(() => _initializing = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.l10n.couldNotTranscribeAudio),
-            duration: const Duration(seconds: 2),
+            content: Text(
+              context.l10n.liveTranscriptionUnavailable(
+                'Speech recognition not available on this device',
+              ),
+            ),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
-      if (mounted) setState(() => _transcribing = false);
-    } else {
-      final started = await svc.start();
-      if (!started && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.microphonePermissionDenied),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-        return;
-      }
+      return;
+    }
+
+    final started = await stt.startListening(
+      onResult: (String text, bool isFinal) {
+        if (!mounted) return;
+        setState(() => _liveText = text);
+        if (isFinal) {
+          setState(() { _listening = false; _liveText = ''; });
+          if (text.trim().isNotEmpty) {
+            ref.read(chatProvider.notifier).sendMessage(text.trim());
+          }
+        }
+      },
+    );
+
+    if (!started && mounted) {
+      setState(() { _initializing = false; _listening = false; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.microphonePermissionDenied),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    if (mounted) {
       HapticFeedback.mediumImpact();
-      setState(() {});
+      setState(() { _initializing = false; _listening = true; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final svc = ref.watch(voiceRecordingServiceProvider);
-    final recording = svc.isRecording;
     final theme = Theme.of(context);
 
-    if (_transcribing) {
+    if (_initializing) {
       return const SizedBox(
         width: 40,
         height: 40,
@@ -68,14 +104,16 @@ class _VoiceMicButtonState extends ConsumerState<VoiceMicButton> {
 
     return IconButton.filled(
       onPressed: _toggle,
-      style: recording
+      style: _listening
           ? IconButton.styleFrom(
               backgroundColor: theme.colorScheme.error,
               foregroundColor: theme.colorScheme.onError,
             )
           : null,
-      icon: Icon(recording ? Icons.stop_rounded : Icons.mic),
-      tooltip: recording ? context.l10n.stopRecording : context.l10n.voiceInput,
+      icon: Icon(_listening ? Icons.stop_rounded : Icons.mic),
+      tooltip: _listening
+          ? (_liveText.isNotEmpty ? _liveText : context.l10n.stopRecording)
+          : context.l10n.voiceInput,
     );
   }
 }

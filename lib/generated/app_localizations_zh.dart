@@ -1262,6 +1262,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceInput => '语音输入';
 
   @override
+  String get speakMessage => 'Speak';
+
+  @override
+  String get stopSpeaking => 'Stop speaking';
+
+  @override
+  String get selectText => 'Select Text';
+
+  @override
+  String get messageCopied => 'Message copied';
+
+  @override
   String get copyTooltip => '复制';
 
   @override

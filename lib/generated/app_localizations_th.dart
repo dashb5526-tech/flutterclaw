@@ -1285,6 +1285,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String get voiceInput => 'อินพุตเสียง';
 
   @override
+  String get speakMessage => 'Speak';
+
+  @override
+  String get stopSpeaking => 'Stop speaking';
+
+  @override
+  String get selectText => 'Select Text';
+
+  @override
+  String get messageCopied => 'Message copied';
+
+  @override
   String get copyTooltip => 'คัดลอก';
 
   @override

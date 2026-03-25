@@ -1307,6 +1307,18 @@ class AppLocalizationsPl extends AppLocalizations {
   String get voiceInput => 'Wprowadzanie głosowe';
 
   @override
+  String get speakMessage => 'Speak';
+
+  @override
+  String get stopSpeaking => 'Stop speaking';
+
+  @override
+  String get selectText => 'Select Text';
+
+  @override
+  String get messageCopied => 'Message copied';
+
+  @override
   String get copyTooltip => 'Kopiuj';
 
   @override
