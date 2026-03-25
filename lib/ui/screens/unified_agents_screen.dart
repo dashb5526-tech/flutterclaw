@@ -683,6 +683,17 @@ class _UnifiedAgentsScreenState extends ConsumerState<UnifiedAgentsScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                if (skill.location == 'workspace')
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 20, color: colors.error),
+                    onPressed: () async {
+                      final removed = await _confirmRemoveSkill(context, skill.name);
+                      if (removed && setSheetState != null) {
+                        setSheetState(() {});
+                      }
+                    },
+                    tooltip: context.l10n.delete,
+                  ),
                 Switch(
                   value: skill.enabled,
                   onChanged: (val) {
@@ -694,33 +705,6 @@ class _UnifiedAgentsScreenState extends ConsumerState<UnifiedAgentsScreen> {
                     }
                   },
                 ),
-                if (skill.location == 'workspace')
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, size: 20),
-                    onSelected: (action) async {
-                      if (action == 'delete') {
-                        final removed = await _confirmRemoveSkill(context, skill.name);
-                        if (removed && setSheetState != null) {
-                          setSheetState(() {});
-                        }
-                      }
-                    },
-                    itemBuilder: (ctx) => [
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_outline, size: 20, color: colors.error),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.delete,
-                              style: TextStyle(color: colors.error),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
               ],
             ),
             onTap: () => _showSkillContent(context, skill),
