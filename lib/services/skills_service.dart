@@ -294,7 +294,14 @@ class SkillsService {
           final colonIdx = line.indexOf(':');
           if (colonIdx < 0) continue;
           final key = line.substring(0, colonIdx).trim();
-          final value = line.substring(colonIdx + 1).trim();
+          var value = line.substring(colonIdx + 1).trim();
+
+          // Remove surrounding quotes from value if present
+          if (value.length >= 2 &&
+              ((value.startsWith('"') && value.endsWith('"')) ||
+               (value.startsWith("'") && value.endsWith("'")))) {
+            value = value.substring(1, value.length - 1);
+          }
 
           switch (key) {
             case 'name':
