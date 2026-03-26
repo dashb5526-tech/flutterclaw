@@ -85,6 +85,13 @@ class ChatCommandHandler {
     final modelName =
         meta.modelOverride ?? configManager.config.agents.defaults.modelName;
 
+    final cacheInfo = StringBuffer();
+    if (meta.cacheReadTokens > 0 || meta.cacheWriteTokens > 0) {
+      cacheInfo.write(
+        '\n- **Cache:** ${meta.cacheReadTokens} read / ${meta.cacheWriteTokens} write',
+      );
+    }
+
     return ChatCommandResult(
       handled: true,
       response: '**Session Status**\n\n'
@@ -92,7 +99,8 @@ class ChatCommandHandler {
           '- **Model:** $modelName\n'
           '- **Messages:** ${meta.messageCount}\n'
           '- **Tokens:** ${meta.totalTokens} total '
-          '(${meta.inputTokens} in / ${meta.outputTokens} out)\n'
+          '(${meta.inputTokens} in / ${meta.outputTokens} out)'
+          '$cacheInfo\n'
           '- **Channel:** ${meta.channelType}\n'
           '- **Last activity:** ${meta.lastActivity.toIso8601String()}',
     );
