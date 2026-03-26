@@ -87,8 +87,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Context usage bar — only visible when context is 50%+ full
-        if (contextUsage >= 0.50)
+        // Context usage bar — visible from 10% onwards (system prompt alone
+        // puts most agents at ~12% on the first message)
+        if (contextUsage >= 0.10)
           _ContextUsageBar(usage: contextUsage),
         if (suggestions.isNotEmpty)
           SlashCommandPicker(

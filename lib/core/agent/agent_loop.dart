@@ -955,6 +955,16 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
           LlmMessage(role: 'assistant', content: contentBuffer),
         );
 
+        // Auto-title: mirror the non-streaming path trigger
+        final streamSessionMeta = sessionManager.listSessions()
+            .where((s) => s.key == sessionKey)
+            .firstOrNull;
+        if (streamSessionMeta != null &&
+            streamSessionMeta.displayName == null &&
+            streamSessionMeta.messageCount <= 4) {
+          _autoTitleSession(sessionKey, message, contentBuffer, modelEntry);
+        }
+
         yield AgentStreamEvent(
           isDone: true,
           finalResponse: AgentResponse(

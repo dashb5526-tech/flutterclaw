@@ -186,15 +186,19 @@ final contextUsageProvider = Provider<double>((ref) {
   );
   if (contextWindow <= 0) return 0.0;
 
-  // Estimate from the rendered chat messages as a proxy for context size.
-  // This is a fast heuristic that avoids reading the JSONL transcript on
-  // every build — exact accuracy is not required for a progress bar.
-  final estimatedTokens = chatMessages.fold<int>(
+  // Count tokens from rendered messages (conversation proxy).
+  final messageTokens = chatMessages.fold<int>(
     0,
     (sum, m) => sum + TokenBudgetManager.estimateTokens(m.text),
   );
 
-  final ratio = estimatedTokens / contextWindow;
+  // Add a fixed estimate for the system prompt (workspace files + runtime
+  // context + device guidance). This is the dominant cost for Claude/Bedrock
+  // (~25K tokens) — without it the bar would stay near 0% for normal sessions.
+  const kSystemPromptEstimate = 25000;
+
+  final totalEstimate = kSystemPromptEstimate + messageTokens;
+  final ratio = totalEstimate / contextWindow;
   return ratio.clamp(0.0, 1.0);
 });
 
