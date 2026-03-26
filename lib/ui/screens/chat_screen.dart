@@ -249,6 +249,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         appBar: AppBar(
           title: Text(context.l10n.appTitle),
           actions: [
+            const _ThinkingLevelChip(),
             const SessionSwitcherChip(),
             IconButton(
               icon: const Icon(Icons.add_comment_outlined),
@@ -393,6 +394,158 @@ class _ChatEmptyState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Thinking level chip — AppBar quick control
+// ---------------------------------------------------------------------------
+
+class _ThinkingLevelChip extends ConsumerWidget {
+  const _ThinkingLevelChip();
+
+  static const _levels = ['auto', 'off', 'low', 'medium', 'high'];
+
+  static const _labels = {
+    'auto': 'Auto',
+    'off': 'Off',
+    'low': 'Low',
+    'medium': 'Med',
+    'high': 'High',
+  };
+
+  static const _descriptions = {
+    'auto': 'Model decides thinking depth (adaptive)',
+    'off': 'No thinking — fastest, lowest cost',
+    'low': 'Light thinking — ~1k tokens',
+    'medium': 'Balanced thinking — ~5k tokens',
+    'high': 'Deep thinking — ~16k tokens (ultrathink)',
+  };
+
+  String _currentLabel(String? level) =>
+      _labels[level ?? 'auto'] ?? 'Auto';
+
+  bool _isActive(String? level) =>
+      level != null && level != 'off';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final meta = ref.watch(activeSessionMetaProvider);
+    final level = meta?.thinkingLevel; // null = auto
+    final active = _isActive(level);
+    final colors = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: ActionChip(
+        avatar: Icon(
+          Icons.psychology_outlined,
+          size: 16,
+          color: active ? colors.onPrimary : colors.onSurfaceVariant,
+        ),
+        label: Text(
+          _currentLabel(level),
+          style: TextStyle(
+            fontSize: 12,
+            color: active ? colors.onPrimary : colors.onSurfaceVariant,
+          ),
+        ),
+        backgroundColor:
+            active ? colors.primary : colors.surfaceContainerHighest,
+        side: BorderSide.none,
+        visualDensity: VisualDensity.compact,
+        tooltip: 'Thinking level',
+        onPressed: () => _showSheet(context, ref, level),
+      ),
+    );
+  }
+
+  void _showSheet(BuildContext context, WidgetRef ref, String? current) {
+    final sm = ref.read(sessionManagerProvider);
+    final key = ref.read(activeSessionKeyProvider);
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final colors = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(Icons.psychology_outlined,
+                        size: 20, color: colors.primary),
+                    const SizedBox(width: 8),
+                    Text('Thinking Level',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Controls how much the model reasons before responding. '
+                  'Say "ultrathink" in chat for one-turn high thinking.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colors.onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                ..._levels.map((lvl) {
+                  final selected = (current ?? 'auto') == lvl;
+                  return ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                    leading: Icon(
+                      selected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: selected ? colors.primary : colors.outlineVariant,
+                      size: 20,
+                    ),
+                    title: Text(
+                      _labels[lvl]!,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.normal,
+                        color: selected ? colors.primary : null,
+                      ),
+                    ),
+                    subtitle: Text(
+                      _descriptions[lvl]!,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: colors.onSurfaceVariant),
+                    ),
+                    onTap: () {
+                      final stored = lvl == 'auto' ? null : lvl;
+                      sm.setThinkingLevel(key, stored);
+                      Navigator.pop(ctx);
+                    },
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

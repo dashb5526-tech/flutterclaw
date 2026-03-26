@@ -7,6 +7,7 @@ import 'package:flutterclaw/ui/screens/settings/about_screen.dart';
 import 'package:flutterclaw/ui/screens/settings/gateway_screen.dart';
 import 'package:flutterclaw/ui/screens/settings/mcp_servers_screen.dart';
 import 'package:flutterclaw/ui/screens/settings/providers_models_screen.dart';
+import 'package:flutterclaw/ui/screens/settings/security_settings_screen.dart';
 import 'package:flutterclaw/ui/screens/settings/tool_policies_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -72,6 +73,21 @@ class SettingsScreen extends ConsumerWidget {
               context,
               MaterialPageRoute(
                   builder: (_) => const ToolPoliciesScreen()),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.lock_outlined,
+            title: 'Security',
+            subtitle: ref.watch(unsafeModeProvider)
+                ? 'Security checks disabled ⚠️'
+                : 'Security checks active',
+            subtitleColor: ref.watch(unsafeModeProvider)
+                ? colors.error
+                : null,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const SecuritySettingsScreen()),
             ),
           ),
           _SettingsTile(

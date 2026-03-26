@@ -1103,6 +1103,31 @@ final activeSessionsProvider = StreamProvider<List<SessionMeta>>((ref) async* {
   }
 });
 
+/// The SessionMeta for the currently active session key.
+/// Rebuilds whenever session data changes (e.g. after /think command).
+final activeSessionMetaProvider = Provider<SessionMeta?>((ref) {
+  final key = ref.watch(activeSessionKeyProvider);
+  // Subscribe to session changes so this provider rebuilds when meta updates.
+  final sessions = ref.watch(activeSessionsProvider);
+  final list = sessions.asData?.value;
+  return list?.where((s) => s.key == key).firstOrNull;
+});
+
+/// Whether persistent unsafe mode (security bypass) is currently enabled.
+/// Synced with [ToolRegistry.persistentUnsafeMode].
+final unsafeModeProvider =
+    NotifierProvider<_UnsafeModeNotifier, bool>(_UnsafeModeNotifier.new);
+
+class _UnsafeModeNotifier extends Notifier<bool> {
+  @override
+  bool build() => false; // always off on app start
+
+  void set(bool value) {
+    state = value;
+    ref.read(toolRegistryProvider).setPersistentUnsafeMode(value);
+  }
+}
+
 final chatProvider = NotifierProvider<ChatNotifier, List<ChatMessage>>(
   ChatNotifier.new,
 );
