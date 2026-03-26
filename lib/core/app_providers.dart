@@ -824,6 +824,7 @@ final channelStartupProvider = FutureProvider<void>((ref) async {
       allowedUserIds: config.channels.telegram.allowFrom,
       dmPolicy: config.channels.telegram.dmPolicy,
       pairingService: pairingService,
+      typingMode: config.agents.defaults.typingMode,
       chatCommandHandler: (sessionKey, command) async {
         final result = await commandHandler.handle(sessionKey, command);
         return result.handled ? result.response : null;

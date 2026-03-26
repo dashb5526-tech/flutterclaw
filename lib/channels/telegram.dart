@@ -19,6 +19,7 @@ class TelegramChannelAdapter implements ChannelAdapter {
     this.dmPolicy = 'pairing',
     this.pairingService,
     this.chatCommandHandler,
+    this.typingMode = 'instant',
   }) : _dio = Dio(BaseOptions(
           baseUrl: '$_apiBase$token',
           connectTimeout: const Duration(seconds: 30),
@@ -30,6 +31,9 @@ class TelegramChannelAdapter implements ChannelAdapter {
   final String? botUsername;
   final String dmPolicy;
   final PairingService? pairingService;
+
+  /// Typing indicator mode: 'never' | 'instant' | 'thinking' | 'message'
+  final String typingMode;
   final Dio _dio;
   final _log = Logger('TelegramChannelAdapter');
 
@@ -98,6 +102,37 @@ class TelegramChannelAdapter implements ChannelAdapter {
   void stopTyping(String chatId) {
     _typingTimers[chatId]?.cancel();
     _typingTimers.remove(chatId);
+  }
+
+  // -- Status reactions --
+
+  /// Sets a single emoji reaction on a message.
+  /// Uses the Telegram Bot API `setMessageReaction` (Bot API 7.0+).
+  /// Silently ignored on older bots or if not supported.
+  Future<void> _setReaction(String chatId, int messageId, String emoji) async {
+    try {
+      await _dio.post('/setMessageReaction', data: {
+        'chat_id': chatId,
+        'message_id': messageId,
+        'reaction': [
+          {'type': 'emoji', 'emoji': emoji}
+        ],
+        'is_big': false,
+      });
+    } catch (_) {
+      // Reactions not supported or bot lacks permission — silently ignore
+    }
+  }
+
+  /// Clears all reactions from a message by sending an empty reaction list.
+  Future<void> _clearReaction(String chatId, int messageId) async {
+    try {
+      await _dio.post('/setMessageReaction', data: {
+        'chat_id': chatId,
+        'message_id': messageId,
+        'reaction': <dynamic>[],
+      });
+    } catch (_) {}
   }
 
   // -- Slash command registration --
@@ -200,13 +235,25 @@ class TelegramChannelAdapter implements ChannelAdapter {
             audioDuration: audioData?.$3,
           );
 
-          // Start typing indicator
-          startTyping(chatIdStr);
+          // Start typing indicator + hourglass status reaction
+          final incomingMsgId = message['message_id'] as int?;
+          if (typingMode == 'instant') startTyping(chatIdStr);
+          if (incomingMsgId != null) {
+            await _setReaction(chatIdStr, incomingMsgId, '⏳');
+          }
 
           try {
             await _handler!(incoming);
+            // Swap ⏳ for ✅ on success
+            if (incomingMsgId != null) {
+              await _setReaction(chatIdStr, incomingMsgId, '✅');
+            }
           } catch (e, st) {
             _log.severe('Handler error processing Telegram message', e, st);
+            // Clear reaction on error (remove via empty list)
+            if (incomingMsgId != null) {
+              await _clearReaction(chatIdStr, incomingMsgId);
+            }
           } finally {
             stopTyping(chatIdStr);
           }
