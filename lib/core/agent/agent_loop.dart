@@ -494,11 +494,15 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     const maxContinuations = 2; // up to 3 rounds × maxToolIterations total
     final provCred = configManager.config.providerCredentials[modelEntry.provider];
 
-    // Resolve thinking/effort settings from session meta.
+    // Resolve thinking/effort settings: keyword detection → session level → model default.
     final sessionMeta = sessionManager.getMeta(sessionKey);
-    final thinkingLevel = _resolveThinkingLevel(sessionMeta?.thinkingLevel, modelEntry);
-    final thinkingBudget = _thinkingBudgetForLevel(thinkingLevel);
-    final effortLevel = _effortForLevel(thinkingLevel);
+    final turnKeyword = _detectThinkingKeyword(message);
+    final thinkingLevel = _resolveThinkingLevel(
+      sessionMeta?.thinkingLevel,
+      modelEntry,
+      turnOverride: turnKeyword,
+    );
+    final thinking = _buildThinkingParams(thinkingLevel, modelEntry);
 
     // Look up CatalogModel for cost tracking.
     final catalogModel = ModelCatalog.models
@@ -522,8 +526,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
           awsSecretKey: provCred?.awsSecretKey,
           awsRegion: provCred?.awsRegion,
           awsAuthMode: provCred?.awsAuthMode,
-          thinkingBudget: thinkingBudget,
-          effort: effortLevel,
+          thinkingBudget: thinking.thinkingBudget,
+          effort: thinking.effort,
         );
 
         LlmResponse response;
@@ -844,11 +848,15 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     const maxContinuations = 2; // up to 3 rounds × maxToolIterations total
     final provCredStream = configManager.config.providerCredentials[modelEntry.provider];
 
-    // Resolve thinking/effort settings from session meta.
+    // Resolve thinking/effort settings: keyword detection → session level → model default.
     final sessionMetaStream = sessionManager.getMeta(sessionKey);
-    final thinkingLevelStream = _resolveThinkingLevel(sessionMetaStream?.thinkingLevel, modelEntry);
-    final thinkingBudgetStream = _thinkingBudgetForLevel(thinkingLevelStream);
-    final effortLevelStream = _effortForLevel(thinkingLevelStream);
+    final turnKeywordStream = _detectThinkingKeyword(message);
+    final thinkingLevelStream = _resolveThinkingLevel(
+      sessionMetaStream?.thinkingLevel,
+      modelEntry,
+      turnOverride: turnKeywordStream,
+    );
+    final thinkingStream = _buildThinkingParams(thinkingLevelStream, modelEntry);
 
     // Look up CatalogModel for cost tracking.
     final catalogModelStream = ModelCatalog.models
@@ -873,8 +881,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
           awsSecretKey: provCredStream?.awsSecretKey,
           awsRegion: provCredStream?.awsRegion,
           awsAuthMode: provCredStream?.awsAuthMode,
-          thinkingBudget: thinkingBudgetStream,
-          effort: effortLevelStream,
+          thinkingBudget: thinkingStream.thinkingBudget,
+          effort: thinkingStream.effort,
         );
 
         final toolCallsBuffer = <ToolCall>[];
@@ -1719,43 +1727,103 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
 
   /// Resolves the effective thinking level for a request.
   ///
-  /// If the user has explicitly set a level (including 'off'), that wins.
-  /// Otherwise, Anthropic-family models default to 'low' thinking so the model
-  /// can reason adaptively without the user needing to configure anything.
-  /// Non-Anthropic models default to null (no thinking).
-  String? _resolveThinkingLevel(String? explicit, ModelEntry modelEntry) {
-    if (explicit != null) {
-      // 'off' means the user explicitly disabled thinking
-      return explicit == 'off' ? null : explicit;
+  /// Priority order:
+  /// 1. Turn-level keyword override (think / think harder / ultrathink)
+  /// 2. Session-level explicit setting (/think command)
+  /// 3. Model default for adaptive-thinking models (uses CatalogModel.defaultEffort)
+  /// 4. null → no thinking for non-Anthropic models
+  String? _resolveThinkingLevel(
+    String? sessionLevel,
+    ModelEntry modelEntry, {
+    String? turnOverride,
+  }) {
+    // Turn-level keyword takes highest priority
+    if (turnOverride != null) return turnOverride;
+
+    // Session-level explicit ('off' means the user disabled it)
+    if (sessionLevel != null) {
+      return sessionLevel == 'off' ? null : sessionLevel;
     }
-    // Auto-enable low thinking for Anthropic models (direct + Bedrock)
-    final isAnthropic = modelEntry.provider == 'anthropic' ||
-        modelEntry.provider == 'bedrock' ||
-        (modelEntry.apiBase?.contains('api.anthropic.com') ?? false);
-    return isAnthropic ? 'low' : null;
+
+    // For models with adaptive thinking, use the model's default effort level
+    final catalog = ModelCatalog.models
+        .where((m) => m.id == modelEntry.model)
+        .firstOrNull;
+    if (catalog != null && catalog.supportsAdaptiveThinking) {
+      return catalog.defaultEffort;
+    }
+
+    return null;
   }
 
-  /// Maps a thinking level string to an Anthropic thinking budget token count.
-  /// Returns null when thinking is disabled.
-  int? _thinkingBudgetForLevel(String? level) {
-    switch (level) {
-      case 'low': return 1024;
-      case 'medium': return 5000;
-      case 'high': return 16000;
-      default: return null; // null/off = no thinking
+  /// Detects thinking keyword triggers in a user message.
+  ///
+  /// Returns a one-turn effort override, or null if no keyword is present.
+  /// Mirrors OpenClaw's keyword detection: "think" → medium, "think harder"
+  /// / "think more" → high, "ultrathink" → high, "don't think" → off.
+  String? _detectThinkingKeyword(String message) {
+    final lower = message.toLowerCase();
+    // Negative first so "don't think harder" doesn't trigger high
+    if (RegExp(r"\bdon'?t\s+think\b").hasMatch(lower) ||
+        RegExp(r'\bno\s+thinking\b').hasMatch(lower) ||
+        RegExp(r'\bstop\s+thinking\b').hasMatch(lower)) {
+      return 'off';
     }
+    if (lower.contains('ultrathink') ||
+        RegExp(r'\bthink\s+(harder|more|deeply|carefully)\b').hasMatch(lower) ||
+        RegExp(r'\bthink\s+a\s+lot\b').hasMatch(lower)) {
+      return 'high';
+    }
+    if (RegExp(r'\bthink\b').hasMatch(lower) ||
+        RegExp(r'\breason\s+(through|about)\b').hasMatch(lower)) {
+      return 'medium';
+    }
+    return null;
   }
 
-  /// Maps a thinking level string to an OpenAI reasoning_effort value.
-  /// Returns null when thinking is disabled.
-  String? _effortForLevel(String? level) {
-    switch (level) {
-      case 'low': return 'low';
-      case 'medium': return 'medium';
-      case 'high': return 'high';
-      default: return null;
+  /// Builds thinking params for the LlmRequest based on the resolved level
+  /// and the model's thinking capabilities.
+  ///
+  /// For adaptive-thinking models: sets [effort] (Anthropic effort API).
+  /// For extended-thinking-only models: sets [thinkingBudget].
+  /// For other models: sets [effort] as OpenAI reasoning_effort.
+  ({int? thinkingBudget, String? effort}) _buildThinkingParams(
+    String? level,
+    ModelEntry modelEntry,
+  ) {
+    if (level == null || level == 'off') {
+      return (thinkingBudget: null, effort: null);
     }
+
+    final catalog = ModelCatalog.models
+        .where((m) => m.id == modelEntry.model)
+        .firstOrNull;
+
+    final isAnthropicProvider = modelEntry.provider == 'anthropic' ||
+        modelEntry.provider == 'bedrock';
+
+    if (isAnthropicProvider) {
+      if (catalog?.supportsAdaptiveThinking == true) {
+        // Use the modern effort API — model decides thinking budget adaptively
+        return (thinkingBudget: null, effort: level);
+      } else if (catalog?.supportsExtendedThinking == true) {
+        // Older extended thinking: explicit budget
+        final budget = switch (level) {
+          'low' => 1024,
+          'medium' => 5000,
+          'high' => 16000,
+          _ => null,
+        };
+        return (thinkingBudget: budget, effort: null);
+      }
+    } else {
+      // OpenAI o-series: reasoning_effort
+      return (thinkingBudget: null, effort: level);
+    }
+
+    return (thinkingBudget: null, effort: null);
   }
+
 
   String _getLanguageName(String languageCode) {
     const languageNames = {

@@ -94,7 +94,7 @@ class ChatCommandHandler {
         final question = message.trim().replaceFirst(RegExp(r'^/btw\s*', caseSensitive: false), '');
         return _handleBtw(sessionKey, question);
       case '/unsafe':
-        return _handleUnsafe();
+        return _handleUnsafe(args);
       case '/bg':
         final task = message.trim().replaceFirst(RegExp(r'^/bg\s*', caseSensitive: false), '');
         return _handleBg(sessionKey, task);
@@ -594,13 +594,44 @@ class ChatCommandHandler {
     }
   }
 
-  ChatCommandResult _handleUnsafe() {
+  ChatCommandResult _handleUnsafe(List<String> args) {
+    final sub = args.isNotEmpty ? args[0].toLowerCase() : null;
+
+    if (sub == 'on') {
+      toolRegistry.setPersistentUnsafeMode(true);
+      return const ChatCommandResult(
+        handled: true,
+        response: '🔓 **Unsafe mode enabled.**\n\n'
+            'Security blocks are now downgraded to warnings — all tool calls '
+            'will execute regardless of dangerous pattern detection.\n\n'
+            'Disable with `/unsafe off` when done.',
+      );
+    }
+
+    if (sub == 'off') {
+      toolRegistry.setPersistentUnsafeMode(false);
+      return const ChatCommandResult(
+        handled: true,
+        response: '🔒 **Unsafe mode disabled.** Security checks restored.',
+      );
+    }
+
+    if (sub == 'status') {
+      final on = toolRegistry.persistentUnsafeMode;
+      return ChatCommandResult(
+        handled: true,
+        response: 'Unsafe mode: **${on ? 'ON 🔓' : 'OFF 🔒'}**',
+      );
+    }
+
+    // No args → one-shot override
     toolRegistry.setSecurityOverride();
     return const ChatCommandResult(
       handled: true,
-      response: '⚠️ **Security override active for the next tool call.**\n\n'
-          'The next blocked operation will be allowed through once. '
-          'Send your message now to proceed.',
+      response: '⚠️ **One-shot security override active.**\n\n'
+          'The next blocked tool call will execute once. '
+          'Send your message now.\n\n'
+          '_Use `/unsafe on` to disable checks persistently for this session._',
     );
   }
 
@@ -727,6 +758,10 @@ class ChatCommandHandler {
       }
     }
 
+    // Security status
+    final unsafeOn = toolRegistry.persistentUnsafeMode;
+    buf.writeln('- **Unsafe mode:** ${unsafeOn ? '🔓 ON — security checks disabled' : '🔒 OFF'}');
+
     // Session summary
     final sessions = sessionManager.listActiveSessions();
     buf.writeln('- **Active sessions:** ${sessions.length}');
@@ -752,7 +787,7 @@ class ChatCommandHandler {
           '- `/compact` — compress session context\n'
           '- `/model [name]` — view or switch model\n'
           '- `/think [off|low|medium|high]` — extended thinking level\n'
-          '- `/unsafe` — allow the next security-blocked tool call\n'
+          '- `/unsafe [on|off|status]` — one-shot or persistent security bypass\n'
           '- `/bg <task>` — run a task in the background\n'
           '- `/rewind [N]` — undo last N exchanges (default 1)\n'
           '- `/fork` — branch current session into a new one\n'

@@ -38,6 +38,7 @@ class AnthropicProvider implements LlmProvider {
             pdfsBeta: _hasDocumentBlocks(request),
             promptCaching: true,
             interleavedThinking: request.thinkingBudget != null,
+            effortApi: request.effort != null,
           ),
           responseType: ResponseType.json,
           receiveTimeout: Duration(
@@ -71,6 +72,7 @@ class AnthropicProvider implements LlmProvider {
             pdfsBeta: _hasDocumentBlocks(request),
             promptCaching: true,
             interleavedThinking: request.thinkingBudget != null,
+            effortApi: request.effort != null,
           ),
           responseType: ResponseType.stream,
           receiveTimeout: Duration(
@@ -232,11 +234,13 @@ class AnthropicProvider implements LlmProvider {
     bool pdfsBeta = false,
     bool promptCaching = false,
     bool interleavedThinking = false,
+    bool effortApi = false,
   }) {
     final betaFeatures = <String>[];
     if (pdfsBeta) betaFeatures.add('pdfs-2024-09-25');
     if (promptCaching) betaFeatures.add('prompt-caching-2024-07-31');
     if (interleavedThinking) betaFeatures.add('interleaved-thinking-2025-05-14');
+    if (effortApi) betaFeatures.add('effort-2025-11-24');
     return {
       'x-api-key': apiKey,
       'anthropic-version': _apiVersion,
@@ -336,6 +340,12 @@ class AnthropicProvider implements LlmProvider {
         'type': 'enabled',
         'budget_tokens': request.thinkingBudget,
       };
+    }
+
+    // Effort API (adaptive thinking) — independent of the budget thinking block.
+    // Uses output_config.effort with the effort-2025-11-24 beta header.
+    if (request.effort != null) {
+      body['output_config'] = {'effort': request.effort};
     }
 
     if (system != null && system.isNotEmpty) {

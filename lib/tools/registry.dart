@@ -88,18 +88,28 @@ class ToolRegistry {
   /// Optional hook runner. Set via [setHookRunner] after construction.
   HookRunner? _hookRunner;
 
-  /// When true, the next blocked tool call is allowed through and this flag
-  /// is immediately cleared. Set via [setSecurityOverride] from /unsafe command.
+  /// One-shot override: allows a single blocked tool call through, then clears.
   bool _securityOverride = false;
+
+  /// Persistent unsafe mode: all security blocks become warnings until toggled off.
+  bool _persistentUnsafeMode = false;
+
+  bool get persistentUnsafeMode => _persistentUnsafeMode;
 
   void setHookRunner(HookRunner runner) {
     _hookRunner = runner;
   }
 
-  /// Allow the next security-blocked tool call to execute.
-  /// Clears automatically after one use.
+  /// Allow the next security-blocked tool call to execute (one-shot).
   void setSecurityOverride() {
     _securityOverride = true;
+  }
+
+  /// Toggle persistent unsafe mode. When enabled, security blocks are
+  /// downgraded to warnings and execution continues.
+  void setPersistentUnsafeMode(bool value) {
+    _persistentUnsafeMode = value;
+    if (value) _securityOverride = false; // clear one-shot if enabling persistent
   }
 
   /// Set the config manager (called during initialization).
@@ -189,15 +199,17 @@ class ToolRegistry {
     final scan = _scanner.scan(name, args);
     if (scan.hasBlock) {
       if (_securityOverride) {
-        _securityOverride = false;
-        _log.warning('Security override active — allowing blocked tool "$name"');
+        _securityOverride = false; // consume one-shot
+        _log.warning('Security override (one-shot) — allowing blocked tool "$name"');
+      } else if (_persistentUnsafeMode) {
+        _log.warning('Security bypass (unsafe mode on) — allowing blocked tool "$name"');
       } else {
         final msg = scan.blocks.map((i) => i.description).join('; ');
         _log.warning('Security block on $name: $msg');
         return ToolResult.error(
             'Security policy blocked "$name": $msg\n\n'
-            'This pattern matches a known dangerous operation. '
-            'If you intended this, use /unsafe to allow the next tool call.');
+            'Use /unsafe for a one-shot override, or /unsafe on to disable '
+            'security checks for this session.');
       }
     }
     if (scan.warnings.isNotEmpty) {
@@ -252,15 +264,17 @@ class ToolRegistry {
     final scan = _scanner.scan(name, args);
     if (scan.hasBlock) {
       if (_securityOverride) {
-        _securityOverride = false;
-        _log.warning('Security override active — allowing blocked tool "$name"');
+        _securityOverride = false; // consume one-shot
+        _log.warning('Security override (one-shot) — allowing blocked tool "$name"');
+      } else if (_persistentUnsafeMode) {
+        _log.warning('Security bypass (unsafe mode on) — allowing blocked tool "$name"');
       } else {
         final msg = scan.blocks.map((i) => i.description).join('; ');
         _log.warning('Security block on $name: $msg');
         return ToolResult.error(
             'Security policy blocked "$name": $msg\n\n'
-            'This pattern matches a known dangerous operation. '
-            'If you intended this, use /unsafe to allow the next tool call.');
+            'Use /unsafe for a one-shot override, or /unsafe on to disable '
+            'security checks for this session.');
       }
     }
     if (scan.warnings.isNotEmpty) {
