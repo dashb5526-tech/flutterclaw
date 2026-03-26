@@ -57,6 +57,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       return _buildShellCommandBubble(context, theme);
     }
 
+    if (!isUser && widget.message.isBtw) {
+      return _buildBtwBubble(context, theme);
+    }
+
     final agentEmoji = isUser
         ? null
         : (ref.watch(activeAgentProvider)?.emoji ?? '🤖');
@@ -558,6 +562,106 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     );
   }
 
+
+  /// Renders a `/btw` ephemeral response with a dashed border and flash icon
+  /// to make it visually distinct from regular assistant messages.
+  Widget _buildBtwBubble(BuildContext context, ThemeData theme) {
+    final colors = theme.colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            margin: const EdgeInsets.only(right: 6, bottom: 4),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.bolt_outlined,
+              size: 18,
+              color: colors.tertiary,
+            ),
+          ),
+          Flexible(
+            child: GestureDetector(
+              onLongPress: () => _showMessageContextMenu(context),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                ),
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: colors.tertiaryContainer.withValues(alpha: 0.5),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                    bottomLeft: Radius.circular(4),
+                    bottomRight: Radius.circular(16),
+                  ),
+                  border: Border.all(
+                    color: colors.tertiary.withValues(alpha: 0.5),
+                    width: 1,
+                    strokeAlign: BorderSide.strokeAlignInside,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.bolt, size: 12, color: colors.tertiary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'btw',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.tertiary,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    MarkdownBody(
+                      data: widget.message.text,
+                      selectable: true,
+                      styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                        p: theme.textTheme.bodyMedium?.copyWith(
+                          color: colors.onTertiaryContainer,
+                        ),
+                        code: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                          color: colors.onTertiaryContainer,
+                          backgroundColor: colors.tertiary.withValues(alpha: 0.1),
+                        ),
+                        codeblockDecoration: BoxDecoration(
+                          color: colors.tertiary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      builders: {'pre': CopyableCodeBlockBuilder(context)},
+                      onTapLink: (_, href, __) async {
+                        if (href != null) {
+                          final uri = Uri.tryParse(href);
+                          if (uri != null) await launchUrl(uri);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildSlashCommandBubble(BuildContext context, ThemeData theme) {
     final colors = theme.colorScheme;

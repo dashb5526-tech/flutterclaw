@@ -87,6 +87,10 @@ class SessionMeta {
   int totalTokens;
   int inputTokens;
   int outputTokens;
+  /// Tokens served from Anthropic prompt cache (billed at ~10% normal rate).
+  int cacheReadTokens;
+  /// Tokens written into Anthropic prompt cache (billed at ~125% normal rate).
+  int cacheWriteTokens;
   DateTime lastActivity;
   String? modelOverride;
   int messageCount;
@@ -103,6 +107,8 @@ class SessionMeta {
     this.totalTokens = 0,
     this.inputTokens = 0,
     this.outputTokens = 0,
+    this.cacheReadTokens = 0,
+    this.cacheWriteTokens = 0,
     DateTime? lastActivity,
     this.modelOverride,
     this.messageCount = 0,
@@ -126,6 +132,8 @@ class SessionMeta {
         'totalTokens': totalTokens,
         'inputTokens': inputTokens,
         'outputTokens': outputTokens,
+        if (cacheReadTokens > 0) 'cacheReadTokens': cacheReadTokens,
+        if (cacheWriteTokens > 0) 'cacheWriteTokens': cacheWriteTokens,
         'lastActivity': lastActivity.toIso8601String(),
         if (modelOverride != null) 'modelOverride': modelOverride,
         'messageCount': messageCount,
@@ -141,6 +149,8 @@ class SessionMeta {
         totalTokens: json['totalTokens'] as int? ?? 0,
         inputTokens: json['inputTokens'] as int? ?? 0,
         outputTokens: json['outputTokens'] as int? ?? 0,
+        cacheReadTokens: json['cacheReadTokens'] as int? ?? 0,
+        cacheWriteTokens: json['cacheWriteTokens'] as int? ?? 0,
         lastActivity: json['lastActivity'] != null
             ? DateTime.parse(json['lastActivity'] as String)
             : DateTime.now(),
@@ -410,6 +420,8 @@ class SessionManager {
     meta.totalTokens = 0;
     meta.inputTokens = 0;
     meta.outputTokens = 0;
+    meta.cacheReadTokens = 0;
+    meta.cacheWriteTokens = 0;
     meta.messageCount = 0;
     meta.lastActivity = DateTime.now();
 
@@ -477,6 +489,8 @@ class SessionManager {
     meta.totalTokens += usage.totalTokens;
     meta.inputTokens += usage.promptTokens;
     meta.outputTokens += usage.completionTokens;
+    meta.cacheReadTokens += usage.cacheReadTokens;
+    meta.cacheWriteTokens += usage.cacheWriteTokens;
     meta.lastActivity = DateTime.now();
     final dir = await _getSessionsDir();
     await _saveStore(dir);

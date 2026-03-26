@@ -33,7 +33,11 @@ class AnthropicProvider implements LlmProvider {
         url,
         data: body,
         options: Options(
-          headers: _headers(request.apiKey, pdfsBeta: _hasDocumentBlocks(request)),
+          headers: _headers(
+            request.apiKey,
+            pdfsBeta: _hasDocumentBlocks(request),
+            promptCaching: true,
+          ),
           responseType: ResponseType.json,
           receiveTimeout: Duration(
             seconds: request.timeoutSeconds ?? 120,
@@ -61,7 +65,11 @@ class AnthropicProvider implements LlmProvider {
         url,
         data: body,
         options: Options(
-          headers: _headers(request.apiKey, pdfsBeta: _hasDocumentBlocks(request)),
+          headers: _headers(
+            request.apiKey,
+            pdfsBeta: _hasDocumentBlocks(request),
+            promptCaching: true,
+          ),
           responseType: ResponseType.stream,
           receiveTimeout: Duration(
             seconds: request.timeoutSeconds ?? 120,
@@ -217,12 +225,21 @@ class AnthropicProvider implements LlmProvider {
     return '$trimmed/v1/messages';
   }
 
-  Map<String, String> _headers(String apiKey, {bool pdfsBeta = false}) => {
-        'x-api-key': apiKey,
-        'anthropic-version': _apiVersion,
-        'Content-Type': 'application/json',
-        if (pdfsBeta) 'anthropic-beta': 'pdfs-2024-09-25',
-      };
+  Map<String, String> _headers(
+    String apiKey, {
+    bool pdfsBeta = false,
+    bool promptCaching = false,
+  }) {
+    final betaFeatures = <String>[];
+    if (pdfsBeta) betaFeatures.add('pdfs-2024-09-25');
+    if (promptCaching) betaFeatures.add('prompt-caching-2024-07-31');
+    return {
+      'x-api-key': apiKey,
+      'anthropic-version': _apiVersion,
+      'Content-Type': 'application/json',
+      if (betaFeatures.isNotEmpty) 'anthropic-beta': betaFeatures.join(','),
+    };
+  }
 
   /// Returns true if the request contains any document content blocks,
   /// which requires the pdfs-2024-09-25 beta header.
@@ -285,6 +302,19 @@ class AnthropicProvider implements LlmProvider {
       }
     }
 
+    // Apply prompt caching breakpoints.
+    // The system prompt is the largest stable block — caching it saves ~90% of
+    // system-prompt tokens on every turn after the first.
+    // Additionally, if the context is long enough, mark the oldest conversation
+    // batch so Anthropic caches it between turns.
+    //
+    // Rules:
+    //  • system prompt   → always cache (breakpoint 1)
+    //  • if >= 8 messages: cache at messages[messages.length - 5] (breakpoint 2)
+    //  • if >= 16 messages: cache at messages[messages.length - 9] (breakpoint 3)
+    // Anthropic supports up to 4 cache breakpoints per request.
+    _applyCacheBreakpoints(messages);
+
     final body = <String, dynamic>{
       'model': request.model,
       'messages': messages,
@@ -293,7 +323,14 @@ class AnthropicProvider implements LlmProvider {
     };
 
     if (system != null && system.isNotEmpty) {
-      body['system'] = system;
+      // Use the block format required for cache_control on the system prompt.
+      body['system'] = [
+        {
+          'type': 'text',
+          'text': system,
+          'cache_control': {'type': 'ephemeral'},
+        }
+      ];
     }
 
     if (request.tools != null && request.tools!.isNotEmpty) {
@@ -302,6 +339,36 @@ class AnthropicProvider implements LlmProvider {
     }
 
     return body;
+  }
+
+  /// Adds Anthropic `cache_control` breakpoints to stable conversation
+  /// boundaries so older turns are cached between requests.
+  ///
+  /// The cache_control marker is placed on the **last content block** of a
+  /// user message at the chosen breakpoint index (Anthropic caches everything
+  /// up to and including that block).  We skip tool-result-only messages
+  /// because those change every turn and shouldn't be breakpoint targets.
+  void _applyCacheBreakpoints(List<Map<String, dynamic>> messages) {
+    if (messages.isEmpty) return;
+
+    // Breakpoint indices (from the end): cache at -5 and -9 if enough messages.
+    final breakpoints = <int>[];
+    if (messages.length >= 8) breakpoints.add(messages.length - 5);
+    if (messages.length >= 16) breakpoints.add(messages.length - 9);
+
+    for (final idx in breakpoints) {
+      final msg = messages[idx];
+      if (msg['role'] != 'user') continue;
+      final content = msg['content'];
+      if (content is! List || content.isEmpty) continue;
+      // Skip messages that are purely tool results (they change every turn).
+      if (_isToolResultMessage(msg)) continue;
+      final lastBlock = content.last as Map<String, dynamic>?;
+      if (lastBlock == null) continue;
+      // Only add cache_control once.
+      if (lastBlock.containsKey('cache_control')) continue;
+      lastBlock['cache_control'] = {'type': 'ephemeral'};
+    }
   }
 
   bool _isToolResultMessage(Map<String, dynamic> m) {
@@ -538,12 +605,21 @@ class AnthropicProvider implements LlmProvider {
     );
   }
 
-  UsageInfo _parseUsage(Map<String, dynamic> json) => UsageInfo(
-        promptTokens: json['input_tokens'] as int? ?? 0,
-        completionTokens: json['output_tokens'] as int? ?? 0,
-        totalTokens: (json['input_tokens'] as int? ?? 0) +
-            (json['output_tokens'] as int? ?? 0),
-      );
+  UsageInfo _parseUsage(Map<String, dynamic> json) {
+    final inputTokens = json['input_tokens'] as int? ?? 0;
+    final outputTokens = json['output_tokens'] as int? ?? 0;
+    final cacheReadTokens =
+        json['cache_read_input_tokens'] as int? ?? 0;
+    final cacheWriteTokens =
+        json['cache_creation_input_tokens'] as int? ?? 0;
+    return UsageInfo(
+      promptTokens: inputTokens,
+      completionTokens: outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      cacheReadTokens: cacheReadTokens,
+      cacheWriteTokens: cacheWriteTokens,
+    );
+  }
 
   String _mapStopReason(String stopReason) {
     switch (stopReason) {
