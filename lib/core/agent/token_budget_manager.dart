@@ -87,27 +87,35 @@ class TokenBudgetManager {
 
   /// Get the maximum safe tokens for a single tool result.
   ///
-  /// Uses config.agents.defaults.maxToolResultTokens if set (default: 50000).
-  /// Falls back to 30% of context window if not configured.
+  /// Uses `min(configuredMax, contextWindow * 0.30)` so a single tool result
+  /// can never consume more than 30% of the context window regardless of
+  /// explicit config, matching OpenClaw's proportional budget strategy.
   static int getMaxToolResultTokens(
     String modelName,
     ConfigManager configManager,
   ) {
+    final contextWindow = getContextWindow(modelName, configManager);
+    final proportionalMax = (contextWindow * 0.30).toInt();
+
     final configuredMax =
         configManager.config.agents.defaults.maxToolResultTokens;
 
-    // If configured explicitly, use that
-    if (configuredMax > 0) return configuredMax;
+    // Clamp: never exceed 30% of the context window, never exceed hard limit
+    if (configuredMax > 0) {
+      return configuredMax < proportionalMax ? configuredMax : proportionalMax;
+    }
 
-    // Otherwise, allocate 30% of context window
-    final contextWindow = getContextWindow(modelName, configManager);
-    return (contextWindow * 0.30).toInt();
+    return proportionalMax;
   }
 
   /// Truncate content to fit within a token limit.
   ///
-  /// Keeps the first ~70% and last ~10% of content, with a truncation
-  /// marker in the middle explaining what happened.
+  /// Uses smart head+tail ratios based on whether the tail contains important
+  /// information (errors, JSON endings, summaries).  Matches OpenClaw's
+  /// `tool-result-truncation.ts` `hasImportantTail` heuristic:
+  ///
+  ///  • Normal tail  → 70% head + 10% tail  (same as before)
+  ///  • Important tail → 60% head + 25% tail  (preserve errors/JSON/totals)
   static String truncateToTokenLimit(String content, int maxTokens) {
     final estimatedTokens = estimateTokens(content);
 
@@ -115,24 +123,27 @@ class TokenBudgetManager {
       return content; // No truncation needed
     }
 
-    // Calculate character budgets
-    // Keep first 70% and last 10% of allowed tokens
-    final maxChars = maxTokens * 4; // Convert back to chars
-    final firstChars = (maxChars * 0.70).toInt();
-    final lastChars = (maxChars * 0.10).toInt();
+    // Decide head/tail split based on tail importance
+    final importantTail = _hasImportantTail(content);
+    final headRatio = importantTail ? 0.60 : 0.70;
+    final tailRatio = importantTail ? 0.25 : 0.10;
 
-    // Build truncated result
+    final maxChars = maxTokens * 4; // 1 token ≈ 4 chars
+    final firstChars = (maxChars * headRatio).toInt();
+    final lastChars = (maxChars * tailRatio).toInt();
+
     final first = content.length > firstChars
         ? content.substring(0, firstChars)
         : content;
 
-    final last = content.length > lastChars
+    final last = (content.length > lastChars && lastChars > 0)
         ? content.substring(content.length - lastChars)
         : '';
 
     final omittedChars = content.length - first.length - last.length;
+    final tailNote = importantTail ? ' (tail preserved — contains errors/JSON/totals)' : '';
     final truncationMarker = '\n\n'
-        '[... TOOL RESULT TRUNCATED ...]\n\n'
+        '[... TOOL RESULT TRUNCATED$tailNote ...]\n\n'
         'This result was too large (estimated $estimatedTokens tokens, '
         'max $maxTokens tokens).\n'
         'The middle portion was omitted to stay within context limits '
@@ -146,10 +157,31 @@ class TokenBudgetManager {
 
     _log.warning(
       'Truncated content: ${content.length} chars → ${truncated.length} chars '
-      '($estimatedTokens tokens → ${estimateTokens(truncated)} tokens)',
+      '($estimatedTokens tokens → ${estimateTokens(truncated)} tokens, '
+      'importantTail=$importantTail)',
     );
 
     return truncated;
+  }
+
+  /// Returns true if the last ~2000 characters of [content] appear to contain
+  /// important information that should be preserved even when truncating.
+  ///
+  /// Detects: error messages, JSON/array endings, summary lines, totals, and
+  /// result blocks — matching OpenClaw's `hasImportantTail()` heuristic.
+  static bool _hasImportantTail(String content) {
+    if (content.length < 100) return false;
+    final tailLength = content.length < 2000 ? content.length : 2000;
+    final tail = content.substring(content.length - tailLength).toLowerCase();
+    return tail.contains(RegExp(
+      r'error|exception|failed|traceback|'
+      r'}\s*$|]\s*$|'          // JSON/array endings
+      r'summary|total|result|'
+      r'count:|found \d|'
+      r'success|completed|done',
+      caseSensitive: false,
+      multiLine: true,
+    ));
   }
 
   /// Estimate total tokens in a conversation context.
