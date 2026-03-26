@@ -243,23 +243,34 @@ class UsageInfo {
   final int promptTokens;
   final int completionTokens;
   final int totalTokens;
+  /// Tokens read from Anthropic prompt cache (charged at ~10% of normal rate).
+  final int cacheReadTokens;
+  /// Tokens written to Anthropic prompt cache (charged at ~125% of normal rate,
+  /// but saves on all subsequent reads within the 5-minute TTL window).
+  final int cacheWriteTokens;
 
   const UsageInfo({
     required this.promptTokens,
     required this.completionTokens,
     required this.totalTokens,
+    this.cacheReadTokens = 0,
+    this.cacheWriteTokens = 0,
   });
 
   Map<String, dynamic> toJson() => {
     'prompt_tokens': promptTokens,
     'completion_tokens': completionTokens,
     'total_tokens': totalTokens,
+    if (cacheReadTokens > 0) 'cache_read_tokens': cacheReadTokens,
+    if (cacheWriteTokens > 0) 'cache_write_tokens': cacheWriteTokens,
   };
 
   factory UsageInfo.fromJson(Map<String, dynamic> json) => UsageInfo(
     promptTokens: json['prompt_tokens'] as int? ?? 0,
     completionTokens: json['completion_tokens'] as int? ?? 0,
     totalTokens: json['total_tokens'] as int? ?? 0,
+    cacheReadTokens: json['cache_read_tokens'] as int? ?? 0,
+    cacheWriteTokens: json['cache_write_tokens'] as int? ?? 0,
   );
 }
 

@@ -6,8 +6,12 @@ class SlashCommandDef {
 }
 
 const kSlashCommands = [
+  SlashCommandDef('/btw', 'Quick side question — no context pollution'),
   SlashCommandDef('/help', 'Show available commands'),
+  SlashCommandDef('/context', 'Context window usage breakdown'),
   SlashCommandDef('/status', 'Session info (model, tokens, cost)'),
+  SlashCommandDef('/agents', 'List agents or switch  /agents [switch <name>]'),
+  SlashCommandDef('/export', 'Export session as Markdown via share sheet'),
   SlashCommandDef('/new', 'Start a new session'),
   SlashCommandDef('/reset', 'Reset the current session'),
   SlashCommandDef('/compact', 'Compress session context with AI summary'),
