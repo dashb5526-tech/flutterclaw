@@ -2346,6 +2346,13 @@ class GatewayStateNotifier extends Notifier<GatewayState> {
       _watchdogSub?.cancel();
       _watchdogSub = null;
     });
+    // Keep currentModel in sync when the active agent or its model changes.
+    ref.listen<AgentProfile?>(activeAgentProvider, (_, next) {
+      final newModel = next?.modelName;
+      if (newModel != null && newModel.isNotEmpty && newModel != state.currentModel) {
+        setModel(newModel);
+      }
+    });
     return const GatewayState();
   }
 
@@ -2358,6 +2365,11 @@ class GatewayStateNotifier extends Notifier<GatewayState> {
     _cancelUptimeTimer();
     _watchdogSub?.cancel();
     _watchdogSub = null;
+    String? modelOnStart;
+    if (running) {
+      final config = ref.read(configManagerProvider).config;
+      modelOnStart = config.activeAgent?.modelName ?? config.agents.defaults.modelName;
+    }
     state = state.copyWith(
       isRunning: running,
       status: running ? 'running' : 'stopped',
@@ -2366,6 +2378,7 @@ class GatewayStateNotifier extends Notifier<GatewayState> {
       uptimeSeconds: 0,
       tokensProcessed: 0,
       sessionCount: 0,
+      currentModel: modelOnStart,
     );
     _syncLiveActivity();
     if (running) {
