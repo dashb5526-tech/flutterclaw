@@ -62,10 +62,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _prevPage() {
     if (_currentPage > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+      // On-device: skip the auth page (page 2) when going back
+      if (_selectedProviderId == 'ondevice' && _currentPage == 3) {
+        _pageController.animateToPage(
+          1,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        _pageController.previousPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
     }
   }
 
@@ -250,9 +259,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         _authResult = null;
                         _keyValidated = false;
                       });
-                      Future.delayed(const Duration(milliseconds: 250), () {
-                        if (mounted) _nextPage();
-                      });
+
+                      // On-device provider needs no API key — pre-fill auth
+                      // result and skip the auth page entirely.
+                      if (id == 'ondevice') {
+                        final model = ModelCatalog.availableModelsForProvider('ondevice').first;
+                        setState(() {
+                          _authResult = AuthResult(
+                            apiKey: 'on-device',
+                            modelId: model.id,
+                            modelDisplayName: model.displayName,
+                            apiBase: 'on-device',
+                            isFree: true,
+                          );
+                          _keyValidated = true;
+                        });
+                        // Skip auth page (page 2) → jump to page 3
+                        Future.delayed(const Duration(milliseconds: 250), () {
+                          if (mounted) {
+                            _pageController.animateToPage(
+                              Platform.isAndroid ? 3 : 3,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          }
+                        });
+                      } else {
+                        Future.delayed(const Duration(milliseconds: 250), () {
+                          if (mounted) _nextPage();
+                        });
+                      }
                     },
                   ),
 

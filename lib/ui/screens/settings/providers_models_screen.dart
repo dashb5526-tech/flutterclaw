@@ -818,6 +818,7 @@ class _AddProviderScreenState extends State<_AddProviderScreen> {
     final showBaseUrl =
         _selectedProviderId == 'ollama' || _selectedProviderId == 'custom';
     final isBedrock = _selectedProviderId == 'bedrock';
+    final isOnDevice = _selectedProviderId == 'ondevice';
 
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.addProvider)),
@@ -838,6 +839,28 @@ class _AddProviderScreenState extends State<_AddProviderScreen> {
               )),
           if (_selectedProviderId != null) ...[
             const SizedBox(height: 24),
+            if (isOnDevice) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(AppTokens.radiusSM),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(children: [
+                  Icon(Icons.phone_iphone, color: Colors.green.shade700, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'No API key required. Runs entirely on your device — private and free.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.green.shade800,
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ] else ...[
             Text(context.l10n.apiKeyTitle,
                 style: theme.textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.bold)),
@@ -960,13 +983,16 @@ class _AddProviderScreenState extends State<_AddProviderScreen> {
                 ),
               ),
             ],
+            ], // end else (non-ondevice) block
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               height: 48,
               child: Consumer(builder: (ctx, ref, _) {
                 bool canSave;
-                if (isBedrock) {
+                if (isOnDevice) {
+                  canSave = true;
+                } else if (isBedrock) {
                   canSave = _apiKeyCtl.text.trim().isNotEmpty &&
                       _awsRegionCtl.text.trim().isNotEmpty;
                   if (_awsAuthMode == 'sigv4') {
@@ -1070,7 +1096,8 @@ class _AddModelScreenState extends ConsumerState<_AddModelScreen> {
                 isAuthenticated: config.isProviderAuthenticated(p.id),
                 onTap: () => setState(() {
                   _selectedProviderId = p.id;
-                  _selectedModelId = null;
+                  _selectedModelId =
+                      p.id == 'ondevice' ? 'ondevice/on-device' : null;
                   _useCustomModel = false;
                   _customModelCtl.clear();
                   _apiBaseCtl.text = p.apiBase ?? '';
@@ -1078,48 +1105,50 @@ class _AddModelScreenState extends ConsumerState<_AddModelScreen> {
               )),
           if (_selectedProviderId != null) ...[
             const SizedBox(height: 24),
-            Text(context.l10n.selectModelStep,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ...ModelCatalog.availableModelsForProvider(_selectedProviderId!)
-                .map((m) => _ModelChip(
-                      model: m,
-                      isSelected:
-                          !_useCustomModel && _selectedModelId == m.id,
-                      onTap: () => setState(() {
-                        _selectedModelId = m.id;
-                        _useCustomModel = false;
-                        _customModelCtl.clear();
-                      }),
-                    )),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              icon: Icon(
-                _useCustomModel ? Icons.close : Icons.edit_outlined,
-                size: 16,
-              ),
-              label: Text(_useCustomModel
-                  ? context.l10n.selectFromList
-                  : context.l10n.enterCustomModelId),
-              onPressed: () => setState(() {
-                _useCustomModel = !_useCustomModel;
-                if (!_useCustomModel) _customModelCtl.clear();
-              }),
-            ),
-            if (_useCustomModel) ...[
+            if (_selectedProviderId != 'ondevice') ...[
+              Text(context.l10n.selectModelStep,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              TextField(
-                controller: _customModelCtl,
-                decoration: InputDecoration(
-                  labelText: context.l10n.modelId,
-                  border: const OutlineInputBorder(),
-                  hintText: 'e.g. google/gemini-3-flash-preview',
+              ...ModelCatalog.availableModelsForProvider(_selectedProviderId!)
+                  .map((m) => _ModelChip(
+                        model: m,
+                        isSelected:
+                            !_useCustomModel && _selectedModelId == m.id,
+                        onTap: () => setState(() {
+                          _selectedModelId = m.id;
+                          _useCustomModel = false;
+                          _customModelCtl.clear();
+                        }),
+                      )),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                icon: Icon(
+                  _useCustomModel ? Icons.close : Icons.edit_outlined,
+                  size: 16,
                 ),
-                onChanged: (val) => setState(() =>
-                    _selectedModelId =
-                        val.trim().isNotEmpty ? val.trim() : null),
+                label: Text(_useCustomModel
+                    ? context.l10n.selectFromList
+                    : context.l10n.enterCustomModelId),
+                onPressed: () => setState(() {
+                  _useCustomModel = !_useCustomModel;
+                  if (!_useCustomModel) _customModelCtl.clear();
+                }),
               ),
+              if (_useCustomModel) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _customModelCtl,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.modelId,
+                    border: const OutlineInputBorder(),
+                    hintText: 'e.g. google/gemini-3-flash-preview',
+                  ),
+                  onChanged: (val) => setState(() =>
+                      _selectedModelId =
+                          val.trim().isNotEmpty ? val.trim() : null),
+                ),
+              ],
             ],
             const SizedBox(height: 24),
             if (alreadyAuthenticated)
