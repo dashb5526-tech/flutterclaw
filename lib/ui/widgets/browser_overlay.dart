@@ -5,6 +5,8 @@
 /// page directly (solving CAPTCHAs, completing 2FA, etc.) then taps Done.
 library;
 
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -17,11 +19,13 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 class BrowserOverlay extends StatefulWidget {
   final String url;
   final String message;
+  final String? userAgent;
 
   const BrowserOverlay({
     super.key,
     required this.url,
     required this.message,
+    this.userAgent,
   });
 
   @override
@@ -32,11 +36,22 @@ class _BrowserOverlayState extends State<BrowserOverlay> {
   InAppWebViewController? _controller;
   String _displayUrl = '';
   bool _loading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _displayUrl = widget.url;
+  }
+
+  void _reload() {
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+    _controller?.loadUrl(
+      urlRequest: URLRequest(url: WebUri(widget.url)),
+    );
   }
 
   @override
@@ -71,6 +86,11 @@ class _BrowserOverlayState extends State<BrowserOverlay> {
           ],
         ),
         actions: [
+          if (_errorMessage != null)
+            IconButton(
+              onPressed: _reload,
+              icon: const Icon(Icons.refresh),
+            ),
           TextButton.icon(
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.check_circle_outline),
@@ -92,11 +112,19 @@ class _BrowserOverlayState extends State<BrowserOverlay> {
           databaseEnabled: true,
           mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
           mediaPlaybackRequiresUserGesture: true,
+          userAgent: widget.userAgent,
         ),
+        initialUserScripts: UnmodifiableListView([
+          UserScript(
+            source: _kAntiDetectionScript,
+            injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+          ),
+        ]),
         onWebViewCreated: (controller) => _controller = controller,
         onLoadStart: (controller, url) {
           setState(() {
             _loading = true;
+            _errorMessage = null;
             _displayUrl = url?.toString() ?? _displayUrl;
           });
         },
@@ -107,9 +135,40 @@ class _BrowserOverlayState extends State<BrowserOverlay> {
           });
         },
         onReceivedError: (controller, request, error) {
-          setState(() => _loading = false);
+          // Only show error for the main frame navigation, not sub-resources
+          if (request.url.toString() == _displayUrl ||
+              request.url.toString() == widget.url) {
+            setState(() {
+              _loading = false;
+              _errorMessage = error.description;
+            });
+          } else {
+            setState(() => _loading = false);
+          }
         },
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Anti-detection script (shared with HeadlessBrowserTool)
+// ---------------------------------------------------------------------------
+
+const _kAntiDetectionScript = '''
+(function() {
+  try {
+    Object.defineProperty(navigator, 'webdriver', {get: () => false});
+    Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+    Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});
+    window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}, app: {}};
+    const orig = window.navigator.permissions && window.navigator.permissions.query;
+    if (orig) {
+      window.navigator.permissions.query = (p) =>
+        p.name === 'notifications'
+          ? Promise.resolve({state: Notification.permission})
+          : orig.call(window.navigator.permissions, p);
+    }
+  } catch(e) {}
+})();
+''';
