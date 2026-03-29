@@ -950,7 +950,63 @@ class SessionManager {
       }
     }
 
+    // Sanitize: ensure every assistant tool_use has a matching tool_result.
+    // A previous crash may have persisted the assistant message with tool_calls
+    // but never written the tool result. The Anthropic API rejects such
+    // transcripts with a 400 error.
+    _repairOrphanedToolUses(messages);
+
     _contextCache[key] = messages;
+  }
+
+  /// Scan [messages] for assistant tool_use blocks that lack a corresponding
+  /// tool_result and either append a synthetic error result or remove the
+  /// orphaned assistant message.
+  void _repairOrphanedToolUses(List<LlmMessage> messages) {
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      if (msg.role != 'assistant' || msg.toolCalls == null) continue;
+
+      // Collect all tool call IDs from this assistant message.
+      final expectedIds = msg.toolCalls!.map((tc) => tc.id).toSet();
+
+      // Look at subsequent messages to find matching tool results.
+      for (var j = i + 1; j < messages.length; j++) {
+        if (messages[j].role == 'tool' && messages[j].toolCallId != null) {
+          expectedIds.remove(messages[j].toolCallId);
+        }
+        // Stop scanning once we hit the next non-tool message (user or assistant).
+        if (messages[j].role == 'user' || messages[j].role == 'assistant') break;
+      }
+
+      // If any tool call IDs are unmatched, insert synthetic error results.
+      if (expectedIds.isNotEmpty) {
+        _log.warning(
+          'Repairing ${expectedIds.length} orphaned tool_use(s) in transcript',
+        );
+        // Find insertion point: right after the last tool message following this
+        // assistant message, or right after the assistant message itself.
+        var insertAt = i + 1;
+        while (insertAt < messages.length && messages[insertAt].role == 'tool') {
+          insertAt++;
+        }
+        for (final id in expectedIds) {
+          final tc = msg.toolCalls!.firstWhere((t) => t.id == id);
+          messages.insert(
+            insertAt,
+            LlmMessage(
+              role: 'tool',
+              content:
+                  'Tool "${tc.function.name}" failed: execution was interrupted '
+                  '(session recovered from a previous error).',
+              toolCallId: id,
+              name: tc.function.name,
+            ),
+          );
+          insertAt++;
+        }
+      }
+    }
   }
 
   Future<void> _saveStore(String dir) async {
