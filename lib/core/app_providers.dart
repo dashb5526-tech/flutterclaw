@@ -1371,6 +1371,16 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
   /// Returns the session key currently being viewed in the chat screen.
   String _getSessionKey() => ref.read(activeSessionKeyProvider);
 
+  /// Parse a session key like "telegram:12345" into (channelType, chatId).
+  /// Falls back to ('webchat', 'default') for webchat sessions.
+  (String channelType, String chatId) _parseSessionKey(String key) {
+    final colonIdx = key.indexOf(':');
+    if (colonIdx < 0) return ('webchat', 'default');
+    final channelType = key.substring(0, colonIdx);
+    final chatId = key.substring(colonIdx + 1);
+    return (channelType, chatId);
+  }
+
   @override
   List<ChatMessage> build() {
     // Subscribe to subagent completion events. When a subagent belonging to
@@ -2048,11 +2058,14 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
         lastFlush = DateTime.now();
       }
 
+      final sessionKey = _getSessionKey();
+      final (channelType, chatId) = _parseSessionKey(sessionKey);
+
       await for (final event in agentLoop.processMessageStream(
-        _getSessionKey(),
+        sessionKey,
         text,
-        channelType: 'webchat',
-        chatId: 'default',
+        channelType: channelType,
+        chatId: chatId,
       )) {
         if (_cancelled) break;
 
@@ -2138,6 +2151,26 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
             errorCtaLabel: resp?.errorCtaLabel,
           );
           state = updated;
+
+          // Route the response back to the originating channel (Telegram,
+          // Discord, etc.) so the user sees it there too — not just in the
+          // app UI. Webchat sessions don't need this because the UI *is*
+          // the channel.
+          if (channelType != 'webchat' && finalText.trim().isNotEmpty) {
+            try {
+              final router = ref.read(channelRouterProvider);
+              await router.sendMessage(
+                OutgoingMessage(
+                  channelType: channelType,
+                  chatId: chatId,
+                  text: finalText,
+                ),
+              );
+            } catch (e) {
+              Logger('ChatNotifier').warning(
+                  'Failed to route response to $channelType', e);
+            }
+          }
 
           if (_isAppInBackground && finalText.trim().isNotEmpty) {
             _sendBackgroundNotification(finalText);
