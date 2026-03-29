@@ -233,6 +233,99 @@ const _kCaptchaDetectScript = '''
 ''';
 
 // ---------------------------------------------------------------------------
+// SPA content-readiness detection script
+// ---------------------------------------------------------------------------
+// Polls whether a page has rendered meaningful content or is still an empty
+// SPA shell (React, Vue, Next.js, etc.). Returns JSON with readiness signals.
+
+const _kContentReadyScript = r'''
+(function() {
+  var body = document.body;
+  if (!body) return JSON.stringify({ready: false, reason: 'no_body', textLen: 0});
+
+  var text = (body.innerText || '').trim();
+  var textLen = text.length;
+
+  // Detect empty SPA shells: root div with little or no rendered content
+  var shells = ['#root', '#app', '#__next', '#main-content', '[data-reactroot]',
+                '#react-root', '#__nuxt', '#svelte', '[id*="react"]'];
+  var isEmptyShell = false;
+  for (var i = 0; i < shells.length; i++) {
+    var el = document.querySelector(shells[i]);
+    if (el && el.children.length <= 2 && (el.innerText || '').trim().length < 80) {
+      isEmptyShell = true;
+      break;
+    }
+  }
+
+  // Detect visible loading spinners/skeletons (only if actually visible)
+  var loaderSels = [
+    '[class*="spinner"]', '[class*="loading"]', '[class*="skeleton"]',
+    '[class*="Spinner"]', '[class*="Loading"]', '[class*="Skeleton"]',
+    '[role="progressbar"]:not([aria-hidden="true"])',
+    '.shimmer', '[class*="placeholder"]', '[class*="loader"]',
+  ];
+  var hasLoader = false;
+  for (var j = 0; j < loaderSels.length; j++) {
+    var el = document.querySelector(loaderSels[j]);
+    if (el) {
+      var r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) { hasLoader = true; break; }
+    }
+  }
+
+  // Ready when meaningful text content exists, no empty shell, no visible loaders
+  var ready = textLen > 200 && !isEmptyShell && !hasLoader;
+  return JSON.stringify({
+    ready: ready,
+    textLen: textLen,
+    isEmptyShell: isEmptyShell,
+    hasLoader: hasLoader,
+    readyState: document.readyState,
+  });
+})();
+''';
+
+// ---------------------------------------------------------------------------
+// Markdown content extraction script (shared by _getContent and retry logic)
+// ---------------------------------------------------------------------------
+
+const _kNodeToMdScript = r'''
+(function() {
+  function nodeToMd(node) {
+    if (node.nodeType === 3) return node.textContent;
+    if (node.nodeType !== 1) return '';
+    var tag = node.tagName.toLowerCase();
+    if (['script','style','noscript','svg','path'].includes(tag)) return '';
+    if (tag === 'br') return '\n';
+    var children = Array.from(node.childNodes).map(nodeToMd).join('');
+    switch(tag) {
+      case 'h1': return '\n# ' + children.trim() + '\n';
+      case 'h2': return '\n## ' + children.trim() + '\n';
+      case 'h3': return '\n### ' + children.trim() + '\n';
+      case 'h4': return '\n#### ' + children.trim() + '\n';
+      case 'h5': return '\n##### ' + children.trim() + '\n';
+      case 'h6': return '\n###### ' + children.trim() + '\n';
+      case 'p': return '\n' + children.trim() + '\n';
+      case 'li': return '- ' + children.trim() + '\n';
+      case 'a': var href = node.getAttribute('href') || ''; var t = children.trim(); return href ? '[' + t + '](' + href + ')' : t;
+      case 'img': var alt = node.getAttribute('alt') || ''; var src = node.getAttribute('src') || ''; return alt ? '![' + alt + '](' + src + ')' : '';
+      case 'code': return '`' + children + '`';
+      case 'pre': return '\n```\n' + children.trim() + '\n```\n';
+      case 'blockquote': return '\n> ' + children.trim() + '\n';
+      case 'strong': case 'b': return '**' + children.trim() + '**';
+      case 'em': case 'i': return '*' + children.trim() + '*';
+      case 'div': case 'section': case 'article': case 'main': return '\n' + children;
+      default: return children;
+    }
+  }
+  var body = document.body || document.documentElement;
+  if (!body) return '';
+  return nodeToMd(body).replace(/\n{3,}/g, '\n\n').trim();
+})();
+''';
+
+// ---------------------------------------------------------------------------
 // User-agent presets
 // ---------------------------------------------------------------------------
 
@@ -295,6 +388,9 @@ class HeadlessBrowserTool extends Tool {
   _BrowserTab? get _activeTab => _tabs[_activeTabId];
   InAppWebViewController? get _controller => _activeTab?.controller;
 
+  /// Current user agent string (for sharing with visible overlays).
+  String get currentUserAgent => _userAgent;
+
   @override
   String get name => 'web_browse';
 
@@ -309,6 +405,14 @@ class HeadlessBrowserTool extends Tool {
       'switch_iframe, new_tab, switch_tab, close_tab, set_viewport, '
       'inject_script, set_user_agent, set_geolocation, '
       'intercept_requests, block_resources, request_user_action.'
+      '\n\nSPA / REACT TIMING: After navigate, the browser waits up to 10s (configurable '
+      'via wait_ms) for the page to render meaningful content, with early exit when ready. '
+      'For very heavy SPAs, you may need to use wait_for with a specific CSS selector. '
+      'IMPORTANT: Do NOT use the js action to directly modify DOM elements on React/Vue/Angular '
+      'pages — the framework will immediately overwrite your changes during reconciliation. '
+      'Instead, interact through click/type/keyboard actions which fire native DOM events that '
+      'the framework processes correctly. If you need to extract data, use get_content or js to '
+      'READ values, not to write/modify the DOM.'
       '\n\nAUTH WALL HANDLING (IMPORTANT): After every navigate, the browser automatically '
       'detects if the page requires login. When "🔐 LOGIN REQUIRED" appears in the result: '
       '(1) Inform the user that the site needs authentication and ask if they want to log in via the app. '
@@ -349,7 +453,7 @@ class HeadlessBrowserTool extends Tool {
           },
           // Navigation
           'url': {'type': 'string', 'description': 'URL to navigate to.'},
-          'wait_ms': {'type': 'integer', 'description': 'Extra ms to wait after page load (default: 2000).'},
+          'wait_ms': {'type': 'integer', 'description': 'Max ms to wait for SPA content to render (default: 10000). Exits early when content is ready.'},
           // JS / interaction
           'script': {'type': 'string', 'description': 'JavaScript code to execute.'},
           'selector': {'type': 'string', 'description': 'CSS selector for target element.'},
@@ -485,7 +589,7 @@ class HeadlessBrowserTool extends Tool {
     if (urlStr == null || urlStr.isEmpty) {
       return ToolResult.error('url is required for navigate action');
     }
-    final waitMs = args['wait_ms'] as int? ?? 2000;
+    final maxWaitMs = args['wait_ms'] as int? ?? 10000;
 
     final ssrfError = validateFetchUrl(urlStr);
     if (ssrfError != null) return ToolResult.error(ssrfError);
@@ -503,8 +607,10 @@ class HeadlessBrowserTool extends Tool {
     await tab.pageLoadCompleter!.future
         .timeout(const Duration(seconds: 30), onTimeout: () {});
 
-    if (waitMs > 0) {
-      await Future<void>.delayed(Duration(milliseconds: waitMs));
+    // Smart content-readiness polling: wait up to maxWaitMs for the SPA to
+    // hydrate, but exit early as soon as meaningful content is detected.
+    if (maxWaitMs > 0) {
+      await _waitForContentReady(maxWaitMs: maxWaitMs);
     }
 
     final finalUrl = (await tab.controller!.getUrl())?.toString() ?? urlStr;
@@ -624,42 +730,19 @@ class HeadlessBrowserTool extends Tool {
     if (_controller == null) return ToolResult.error('No browser session. Use navigate first.');
     final maxChars = args['max_chars'] as int? ?? 50000;
 
-    final result = await _controller!.evaluateJavascript(source: r'''
-      (function() {
-        function nodeToMd(node) {
-          if (node.nodeType === 3) return node.textContent;
-          if (node.nodeType !== 1) return '';
-          var tag = node.tagName.toLowerCase();
-          if (['script','style','noscript','svg','path'].includes(tag)) return '';
-          if (tag === 'br') return '\n';
-          var children = Array.from(node.childNodes).map(nodeToMd).join('');
-          switch(tag) {
-            case 'h1': return '\n# ' + children.trim() + '\n';
-            case 'h2': return '\n## ' + children.trim() + '\n';
-            case 'h3': return '\n### ' + children.trim() + '\n';
-            case 'h4': return '\n#### ' + children.trim() + '\n';
-            case 'h5': return '\n##### ' + children.trim() + '\n';
-            case 'h6': return '\n###### ' + children.trim() + '\n';
-            case 'p': return '\n' + children.trim() + '\n';
-            case 'li': return '- ' + children.trim() + '\n';
-            case 'a': var href = node.getAttribute('href') || ''; var t = children.trim(); return href ? '[' + t + '](' + href + ')' : t;
-            case 'img': var alt = node.getAttribute('alt') || ''; var src = node.getAttribute('src') || ''; return alt ? '![' + alt + '](' + src + ')' : '';
-            case 'code': return '`' + children + '`';
-            case 'pre': return '\n```\n' + children.trim() + '\n```\n';
-            case 'blockquote': return '\n> ' + children.trim() + '\n';
-            case 'strong': case 'b': return '**' + children.trim() + '**';
-            case 'em': case 'i': return '*' + children.trim() + '*';
-            case 'div': case 'section': case 'article': case 'main': return '\n' + children;
-            default: return children;
-          }
-        }
-        var body = document.body || document.documentElement;
-        if (!body) return '';
-        return nodeToMd(body).replace(/\n{3,}/g, '\n\n').trim();
-      })();
-    ''');
+    final result = await _controller!.evaluateJavascript(source: _kNodeToMdScript);
 
     var content = result?.toString() ?? '';
+
+    // If content looks like an unhydrated SPA shell, wait and retry once
+    if (content.trim().length < 200) {
+      await _waitForContentReady(maxWaitMs: 5000);
+      final retryResult = await _controller!.evaluateJavascript(source: _kNodeToMdScript);
+      final retryContent = retryResult?.toString() ?? '';
+      if (retryContent.length > content.length) {
+        content = retryContent;
+      }
+    }
     if (content.length > maxChars) {
       content = '${content.substring(0, maxChars)}\n\n[... truncated]';
     }
@@ -1794,6 +1877,33 @@ class HeadlessBrowserTool extends Tool {
       }
       _pendingLocalStorage.remove(domainKey);
     } catch (_) {}
+  }
+
+  /// Polls the page until SPA content appears ready or [maxWaitMs] elapses.
+  /// Returns early as soon as the page has meaningful rendered content.
+  Future<void> _waitForContentReady({
+    int maxWaitMs = 10000,
+    int pollIntervalMs = 300,
+  }) async {
+    if (_controller == null) return;
+
+    final deadline = DateTime.now().add(Duration(milliseconds: maxWaitMs));
+
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final result = await _controller!.evaluateJavascript(
+          source: _kContentReadyScript,
+        );
+        if (result != null && result.toString() != 'null') {
+          final status = jsonDecode(result.toString()) as Map<String, dynamic>;
+          if (status['ready'] == true) return;
+        }
+      } catch (_) {
+        // JS eval can fail during navigation transitions; just retry
+      }
+      await Future<void>.delayed(Duration(milliseconds: pollIntervalMs));
+    }
+    // Timeout reached — proceed anyway (page may be legitimately sparse)
   }
 
   Future<Directory> _profilesDir() async {
