@@ -54,14 +54,19 @@ FlutterClaw is currently in **early alpha**. This release is experimental: you m
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/chat.png" width="200" />
-  <img src="screenshots/add-model.png" width="200" />
-  <img src="screenshots/channels-gateway.png" width="200" />
-  <img src="screenshots/agent-detail.png" width="200" />
+  <img src="screenshots/screenshot-1.png" width="200" alt="Screenshot 1" />
+  <img src="screenshots/screenshot-2.png" width="200" alt="Screenshot 2" />
+  <img src="screenshots/screenshot-3.png" width="200" alt="Screenshot 3" />
 </p>
 <p align="center">
-  <img src="screenshots/agents-skills.png" width="200" />
-  <img src="screenshots/clawhub-skills.png" width="200" />
+  <img src="screenshots/screenshot-4.png" width="200" alt="Screenshot 4" />
+  <img src="screenshots/screenshot-5.png" width="200" alt="Screenshot 5" />
+  <img src="screenshots/screenshot-6.png" width="200" alt="Screenshot 6" />
+</p>
+<p align="center">
+  <img src="screenshots/screenshot-7.png" width="200" alt="Screenshot 7" />
+  <img src="screenshots/screenshot-8.png" width="200" alt="Screenshot 8" />
+  <img src="screenshots/screenshot-9.png" width="200" alt="Screenshot 9" />
 </p>
 
 ---
