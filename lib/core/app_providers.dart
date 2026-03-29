@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterclaw/core/providers/error_parser.dart';
 import 'package:flutterclaw/services/ios_background_audio_service.dart';
@@ -60,6 +61,8 @@ import 'package:flutterclaw/tools/ui_automation_tools.dart';
 import 'package:flutterclaw/tools/http_tools.dart';
 import 'package:flutterclaw/tools/web_tools.dart';
 import 'package:flutterclaw/tools/headless_browser_tool.dart';
+import 'package:flutterclaw/ui/widgets/browser_overlay.dart';
+import 'package:flutterclaw/app.dart';
 import 'package:flutterclaw/services/deep_link_service.dart';
 import 'package:flutterclaw/services/notification_service.dart';
 import 'package:flutterclaw/services/sandbox_service.dart';
@@ -276,7 +279,34 @@ final toolRegistryProvider = Provider<ToolRegistry>((ref) {
   registry.register(ListDirTool(wsPath));
   registry.register(AppendFileTool(wsPath));
   registry.register(WebSearchTool(config: configManager.config));
-  final headlessBrowser = HeadlessBrowserTool();
+  final headlessBrowser = HeadlessBrowserTool(
+    config: configManager.config.tools.browser,
+    onRequestUserAction: (url, message) async {
+      final notifService = ref.read(notificationServiceProvider);
+      final agentName = configManager.config.activeAgent?.name ?? 'Agent';
+
+      // Notify the user — critical when they're on a remote channel (Telegram, etc.)
+      // and wouldn't otherwise know the app is waiting for their input.
+      await notifService.showMessageNotification(
+        'browser',
+        '🌐 $agentName — Action Required',
+        message,
+        payload: 'browser_overlay',
+      );
+
+      final nav = FlutterClawApp.navigatorKey.currentState;
+      if (nav == null) return;
+      await nav.push<void>(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => BrowserOverlay(url: url, message: message),
+        ),
+      );
+
+      // Dismiss the notification after the user completes the action
+      await notifService.cancelNotification(NotificationIds.toolStatus);
+    },
+  );
   registry.register(WebFetchTool(headlessBrowser: headlessBrowser));
   registry.register(HttpRequestTool());
   registry.register(ImageGenTool(configManager: configManager));

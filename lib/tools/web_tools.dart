@@ -318,14 +318,14 @@ class WebFetchTool extends Tool {
   }
 
   Future<ToolResult> _fetchHeadless(String url, int maxChars) async {
-    // Use the headless browser tool to navigate and extract content
+    // Use the headless browser tool to navigate and extract content.
+    // Do NOT close the session — preserves cookies and session state for
+    // subsequent calls (login sessions, CAPTCHA completions, etc.).
     await headlessBrowser!.execute({'action': 'navigate', 'url': url});
-    final result = await headlessBrowser!.execute({
+    return headlessBrowser!.execute({
       'action': 'get_content',
       'max_chars': maxChars,
     });
-    await headlessBrowser!.execute({'action': 'close'});
-    return result;
   }
 
   void _removeScriptsAndStyles(dom.Document document) {

@@ -24,12 +24,16 @@ ThemeData _buildTheme(Brightness brightness) {
 class FlutterClawApp extends StatelessWidget {
   const FlutterClawApp({super.key});
 
+  /// Global navigator key used by HeadlessBrowserTool to show overlays.
+  static final navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     final analytics = FirebaseAnalytics.instance;
 
     return ProviderScope(
       child: MaterialApp(
+        navigatorKey: FlutterClawApp.navigatorKey,
         title: 'FlutterClaw',
         debugShowCheckedModeBanner: false,
         theme: _buildTheme(Brightness.light),
