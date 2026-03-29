@@ -1009,7 +1009,9 @@ class HeadlessBrowserTool extends Tool {
     final title = await _controller!.getTitle() ?? '';
 
     return ToolResult(
-      content: 'Screenshot captured: ${screenshot.length} bytes, JPEG quality $quality. URL: $url. Title: $title.\nImage data: data:image/jpeg;base64,$base64Data',
+      // Keep base64 out of content — it goes to the LLM and would fill the context window.
+      // The image is available in details for the UI layer only.
+      content: 'Screenshot captured: ${screenshot.length} bytes, JPEG q$quality. URL: $url. Title: $title.',
       details: {
         'screenshot': {
           'mimeType': 'image/jpeg',
@@ -1054,7 +1056,8 @@ class HeadlessBrowserTool extends Tool {
 
     final base64Data = base64.encode(screenshot);
     return ToolResult(
-      content: 'Element screenshot captured for "$selector". Element bounds: $rectJson. Image data: data:image/jpeg;base64,$base64Data',
+      // base64 kept out of content — image is in details for UI only.
+      content: 'Element screenshot captured for "$selector". Bounds: $rectJson. (${screenshot.length} bytes)',
       details: {
         'screenshot': {
           'mimeType': 'image/jpeg',
