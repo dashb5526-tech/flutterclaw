@@ -142,6 +142,68 @@ const _kAntiDetectionScript = '''
 ''';
 
 // ---------------------------------------------------------------------------
+// Auth wall detection script
+// ---------------------------------------------------------------------------
+// Detects when the browser landed on a login/sign-in page instead of the
+// requested content — indicating the user is not authenticated.
+// Returns a JSON object {type, platform} or null if no auth wall found.
+
+const _kAuthWallDetectScript = r'''
+(function() {
+  var url = window.location.href.toLowerCase();
+  var title = (document.title || '').toLowerCase();
+  var hasPasswordInput = !!document.querySelector('input[type="password"]:not([style*="display:none"])');
+
+  // URL path patterns that clearly indicate a login/auth page
+  var loginPaths = [
+    '/login', '/signin', '/sign-in', '/sign_in',
+    '/auth/login', '/auth/signin', '/account/login', '/user/login',
+    '/session/new', '/sessions/new', '/uas/login',
+    '/i/flow/login', '/oauth/authorize', '/oauth2/authorize',
+    '?login=', '?returnurl=', '?next=', '?redirect=',
+  ];
+  var isLoginUrl = loginPaths.some(function(p) { return url.includes(p); });
+
+  // Title patterns
+  var loginTitles = ['log in', 'login', 'sign in', 'signin', 'authentication required',
+                     'please log in', 'please sign in', 'access your account'];
+  var isLoginTitle = loginTitles.some(function(p) { return title.includes(p); });
+
+  // Page body signals
+  var bodyText = '';
+  try { bodyText = (document.body.innerText || '').substring(0, 3000).toLowerCase(); } catch(e) {}
+  var authDenied = ['you must be logged in', 'you must sign in', 'please log in to continue',
+                    'please sign in to continue', 'not authorized', 'access denied',
+                    'you need to sign in', 'members only', 'login to continue'];
+  var hasAuthDenied = authDenied.some(function(p) { return bodyText.includes(p); });
+
+  if (!hasPasswordInput && !isLoginUrl && !isLoginTitle && !hasAuthDenied) return null;
+
+  // Identify the platform from the domain
+  var host = window.location.hostname.replace('www.', '').replace('mobile.', '');
+  var platform = host.split('.')[0];
+  var knownPlatforms = {
+    'linkedin': 'LinkedIn', 'twitter': 'X / Twitter', 'x': 'X / Twitter',
+    'instagram': 'Instagram', 'facebook': 'Facebook', 'github': 'GitHub',
+    'reddit': 'Reddit', 'tiktok': 'TikTok', 'discord': 'Discord',
+    'slack': 'Slack', 'notion': 'Notion', 'airtable': 'Airtable',
+  };
+  var platformName = knownPlatforms[platform] || host;
+
+  if (hasPasswordInput && (isLoginUrl || isLoginTitle)) {
+    return JSON.stringify({type: 'login_page', platform: platformName});
+  }
+  if (hasAuthDenied) {
+    return JSON.stringify({type: 'auth_wall', platform: platformName});
+  }
+  if (isLoginUrl && hasPasswordInput) {
+    return JSON.stringify({type: 'login_redirect', platform: platformName});
+  }
+  return null;
+})();
+''';
+
+// ---------------------------------------------------------------------------
 // CAPTCHA detection script
 // ---------------------------------------------------------------------------
 // NOTE: Keep patterns specific to avoid false positives on login pages that
@@ -231,15 +293,24 @@ class HeadlessBrowserTool extends Tool {
   @override
   String get description =>
       'Full-featured headless browser with persistent sessions. '
-      'Actions: navigate, js, click, type, get_content, get_html, scroll, back, forward, close, '
+      'Cookies and localStorage persist across app restarts. '
+      '\n\nAVAILABLE ACTIONS: navigate, js, click, type, get_content, get_html, scroll, back, forward, close, '
       'get_cookies, set_cookie, delete_cookies, get_storage, set_storage, save_profile, load_profile, '
       'screenshot, screenshot_element, get_page_info, '
       'wait_for, hover, keyboard, select_option, fill_form, upload_file, query_elements, '
       'switch_iframe, new_tab, switch_tab, close_tab, set_viewport, '
       'inject_script, set_user_agent, set_geolocation, '
-      'intercept_requests, block_resources, request_user_action. '
-      'Cookies and localStorage persist across sessions. '
-      'Automatically detects CAPTCHAs and prompts user when needed.';
+      'intercept_requests, block_resources, request_user_action.'
+      '\n\nAUTH WALL HANDLING (IMPORTANT): After every navigate, the browser automatically '
+      'detects if the page requires login. When "🔐 LOGIN REQUIRED" appears in the result: '
+      '(1) Inform the user that the site needs authentication and ask if they want to log in via the app. '
+      '(2) If they agree, call request_user_action with a clear message like '
+      '"Please log in to [platform] and tap Done when finished." — this opens a visible browser '
+      'in the app so the user can log in directly. '
+      '(3) After the user taps Done, navigate back to the original URL to continue the task. '
+      '(4) Use save_profile to persist the session for future use.'
+      '\n\nCAPTCHA HANDLING: When "⚠️ CAPTCHA DETECTED" appears, call request_user_action '
+      'immediately so the user can solve it in the app.';
 
   @override
   Map<String, dynamic> get parameters => {
@@ -438,6 +509,20 @@ class HeadlessBrowserTool extends Tool {
     result.writeln('Navigated to: $finalUrl');
     if (title.isNotEmpty) result.writeln('Title: $title');
     if (tab.lastError != null) result.writeln('Page error: ${tab.lastError}');
+
+    // Auth wall detection — fires before CAPTCHA so the agent sees the most
+    // actionable signal first.
+    final authWall = await _detectAuthWall();
+    if (authWall != null) {
+      final platform = authWall['platform'] as String? ?? 'the site';
+      result.writeln('');
+      result.writeln('🔐 LOGIN REQUIRED — $platform requires authentication to access this content.');
+      result.writeln('   The browser was redirected to a login page.');
+      result.writeln('   ACTION: Tell the user that $platform requires login, ask if they want to');
+      result.writeln('   open the browser in the app to log in, then call request_user_action with');
+      result.writeln('   message="Please log in to $platform and tap Done when finished."');
+      result.writeln('   After login, navigate back to the original URL to continue the task.');
+    }
 
     // CAPTCHA detection
     final captchaType = await _detectCaptcha();
@@ -1623,6 +1708,18 @@ class HeadlessBrowserTool extends Tool {
       const Duration(seconds: 10),
       onTimeout: () {},
     );
+  }
+
+  Future<Map<String, dynamic>?> _detectAuthWall() async {
+    if (_controller == null) return null;
+    try {
+      final result = await _controller!.evaluateJavascript(source: _kAuthWallDetectScript);
+      final raw = result?.toString();
+      if (raw == null || raw == 'null') return null;
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String?> _detectCaptcha() async {
