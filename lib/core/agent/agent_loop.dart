@@ -458,6 +458,17 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       );
     }
 
+    // Live API models (Gemini Live) require a WebSocket session — they cannot
+    // be used for REST chat completions. Return a user-visible prompt.
+    if (modelEntry.supportsLive) {
+      _log.info('Model "$modelName" is a Live API model — skipping REST call');
+      return AgentResponse(
+        content: 'Este modelo usa la API en tiempo real. '
+            'Toca el botón de voz para iniciar una conversación en vivo.',
+        sessionKey: sessionKey,
+      );
+    }
+
     // Pre-request token validation: check if context approaching limit
     final totalTokens = _estimateContextTokens(context, systemPrompt);
     final contextWindow =
@@ -905,6 +916,20 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         isDone: true,
         finalResponse: AgentResponse(
           content: 'Error: Model "$modelName" is not configured.',
+          sessionKey: sessionKey,
+        ),
+      );
+      return;
+    }
+
+    // Live API models require a WebSocket session — reject REST attempts.
+    if (modelEntry.supportsLive) {
+      _log.info('Model "$modelName" is a Live API model — skipping REST call');
+      yield AgentStreamEvent(
+        isDone: true,
+        finalResponse: AgentResponse(
+          content: 'Este modelo usa la API en tiempo real. '
+              'Toca el botón de voz para iniciar una conversación en vivo.',
           sessionKey: sessionKey,
         ),
       );
