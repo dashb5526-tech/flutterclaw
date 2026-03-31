@@ -267,6 +267,7 @@ class SandboxHandler(private val context: Context) : EventChannel.StreamHandler 
                 pb.environment()["HOME"] = "/root"
                 pb.environment()["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
                 pb.environment()["TERM"] = "xterm-256color"
+                pb.environment()["PYTHONUNBUFFERED"] = "1"
                 pb.environment()["PROOT_TMP_DIR"] = sandboxDir.absolutePath
                 pb.environment()["PROOT_LOADER"] = loaderBin.absolutePath
                 pb.redirectErrorStream(false)
@@ -283,17 +284,28 @@ class SandboxHandler(private val context: Context) : EventChannel.StreamHandler 
                     process.waitFor(5, TimeUnit.SECONDS)
                 }
 
-                // Close streams explicitly to unblock reader threads immediately.
-                // Without this, readCapped() blocks on read() until the 5s future
-                // timeout, making every command feel slow.
-                try { process.inputStream.close() } catch (_: Exception) {}
-                try { process.errorStream.close() } catch (_: Exception) {}
-                try { process.outputStream.close() } catch (_: Exception) {}
-
                 activeProcesses.remove(process)
 
-                val stdout = try { stdoutFuture.get(3, TimeUnit.SECONDS) } catch (_: Exception) { "" }
-                val stderr = try { stderrFuture.get(3, TimeUnit.SECONDS) } catch (_: Exception) { "" }
+                // Drain reader threads BEFORE closing streams. After the
+                // process exits, its pipe ends close → readers see EOF and
+                // return promptly. If PRoot lingers (zombie children keeping
+                // the pipe open), the 3s timeout fires → we force-close
+                // streams to unblock, then retry.
+                var stdout = try { stdoutFuture.get(3, TimeUnit.SECONDS) } catch (_: Exception) { null }
+                var stderr = try { stderrFuture.get(3, TimeUnit.SECONDS) } catch (_: Exception) { null }
+
+                if (stdout == null || stderr == null) {
+                    // Timed out — force-close streams to unblock hung readers.
+                    try { process.inputStream.close() } catch (_: Exception) {}
+                    try { process.errorStream.close() } catch (_: Exception) {}
+                    try { process.outputStream.close() } catch (_: Exception) {}
+                    if (stdout == null) stdout = try { stdoutFuture.get(1, TimeUnit.SECONDS) } catch (_: Exception) { "" }
+                    if (stderr == null) stderr = try { stderrFuture.get(1, TimeUnit.SECONDS) } catch (_: Exception) { "" }
+                } else {
+                    try { process.inputStream.close() } catch (_: Exception) {}
+                    try { process.errorStream.close() } catch (_: Exception) {}
+                    try { process.outputStream.close() } catch (_: Exception) {}
+                }
 
                 postSuccess(result, mapOf(
                     "exit_code" to if (finished) process.exitValue() else -1,
@@ -351,6 +363,7 @@ class SandboxHandler(private val context: Context) : EventChannel.StreamHandler 
             pb.environment()["TERM"] = "xterm-256color"
             pb.environment()["COLUMNS"] = "220"
             pb.environment()["LINES"] = "50"
+            pb.environment()["PYTHONUNBUFFERED"] = "1"
             pb.environment()["PROOT_TMP_DIR"] = sandboxDir.absolutePath
             pb.environment()["PROOT_LOADER"] = loaderBin.absolutePath
 
@@ -436,6 +449,7 @@ class SandboxHandler(private val context: Context) : EventChannel.StreamHandler 
             pb.environment()["HOME"] = "/root"
             pb.environment()["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             pb.environment()["TERM"] = "xterm-256color"
+            pb.environment()["PYTHONUNBUFFERED"] = "1"
             pb.environment()["PROOT_TMP_DIR"] = sandboxDir.absolutePath
             pb.environment()["PROOT_LOADER"] = loaderBin.absolutePath
             pb.redirectErrorStream(false)
