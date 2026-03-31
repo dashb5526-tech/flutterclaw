@@ -1956,7 +1956,15 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       'interactively through the app. Do NOT suggest manual API credentials or '
       'developer portal setup unless the user explicitly asks for API-based access. '
       'The browser supports persistent sessions — the user logs in once and the '
-      'session is saved for future use.',
+      'session is saved for future use.\n\n'
+      '## Image Search\n'
+      'When the user asks to find, search for, or show images or photos '
+      '(e.g. "busca imagenes de gatitos", "show me pictures of mountains", '
+      '"mostrame fotos de..."), use the `web_image_search` tool. '
+      'It returns image URLs ready to embed — include them inline in your '
+      'response using markdown: `![description](url)`.\n'
+      'Do NOT use `image_generate` for finding real photos — that tool creates '
+      'AI-generated art from a prompt, not real images from the web.',
     );
 
     // Workspace files in OpenClaw injection order
