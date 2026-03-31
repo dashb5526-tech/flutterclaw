@@ -43,6 +43,15 @@ class LiveSessionConfig {
     final setup = <String, dynamic>{
       'model': model,
       'generationConfig': generationConfig,
+      // Server-side voice-activity detection: high sensitivity for snappy
+      // end-of-speech detection so the model responds quickly after the
+      // user stops talking.
+      'realtimeInputConfig': {
+        'automaticActivityDetection': {
+          'startOfSpeechSensitivity': 'START_SENSITIVITY_HIGH',
+          'endOfSpeechSensitivity': 'END_SENSITIVITY_HIGH',
+        },
+      },
     };
 
     if (systemInstruction != null) {
