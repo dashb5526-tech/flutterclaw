@@ -4,6 +4,8 @@
 /// WebFetchTool: Fetches URL content and converts to markdown.
 library;
 
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutterclaw/data/models/config.dart';
 import 'package:flutterclaw/services/ssrf_guard.dart';
@@ -415,12 +417,16 @@ class WebFetchTool extends Tool {
   }
 }
 
-/// Searches the web for images. Returns image URLs ready to embed as markdown.
+/// Searches the web for images using the headless browser.
+/// Falls back to Brave API when browser is unavailable and Brave is configured.
 class WebImageSearchTool extends Tool {
   final FlutterClawConfig? config;
   final Dio _dio = Dio();
 
-  WebImageSearchTool({this.config});
+  /// Headless browser for rendering image search results.
+  Tool? headlessBrowser;
+
+  WebImageSearchTool({this.config, this.headlessBrowser});
 
   @override
   String get name => 'web_image_search';
@@ -455,87 +461,107 @@ class WebImageSearchTool extends Tool {
     }
     final count = (args['count'] as int? ?? 5).clamp(1, 10);
 
-    final web = config?.tools.web ?? const WebToolsConfig();
+    // Prefer headless browser — renders JS and handles anti-bot measures.
+    if (headlessBrowser != null) {
+      return _searchWithBrowser(query, count);
+    }
 
+    // Fallback: Brave image search API (if configured).
+    final web = config?.tools.web ?? const WebToolsConfig();
     if (web.brave.enabled && web.brave.apiKey != null) {
       return _searchBraveImages(query, count, web.brave);
     }
-    if (web.duckduckgo.enabled) {
-      return _searchDuckDuckGoImages(query, count);
-    }
 
-    return ToolResult.error('No web search provider configured');
+    return ToolResult.error(
+      'Image search requires a browser session or Brave API key.',
+    );
   }
 
-  Future<ToolResult> _searchDuckDuckGoImages(String query, int count) async {
+  Future<ToolResult> _searchWithBrowser(String query, int count) async {
     try {
       final encoded = Uri.encodeComponent(query);
+      final url = 'https://duckduckgo.com/?q=$encoded&iax=images&ia=images';
 
-      // Step 1: get vqd token
-      final tokenResponse = await _dio.get<String>(
-        'https://duckduckgo.com/?q=$encoded&ia=images&iax=images',
-        options: Options(
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (compatible; FlutterClaw/1.0; +https://flutterclaw.ai)',
-          },
-          responseType: ResponseType.plain,
-          validateStatus: (s) => s != null && s < 400,
-          receiveTimeout: const Duration(seconds: 15),
-        ),
-      );
+      await headlessBrowser!.execute({
+        'action': 'navigate',
+        'url': url,
+        'wait_ms': 8000,
+      });
 
-      final body = tokenResponse.data ?? '';
-      final vqdMatch = RegExp(r'vqd="([^"]+)"').firstMatch(body) ??
-          RegExp(r"vqd='([^']+)'").firstMatch(body) ??
-          RegExp(r'vqd=([0-9\-]+)').firstMatch(body);
+      // Extract image URLs via JS. Tries DDG tile selectors first,
+      // then falls back to any sufficiently large <img> on the page.
+      final jsResult = await headlessBrowser!.execute({
+        'action': 'js',
+        'script': '''
+          (function() {
+            var count = $count;
+            var results = [];
 
-      if (vqdMatch == null) {
-        return ToolResult.error(
-          'Could not start image search session. Try again or use a different query.',
-        );
+            // Strategy 1: DuckDuckGo image tile containers
+            var tiles = document.querySelectorAll('.tile--img');
+            for (var i = 0; i < tiles.length && results.length < count; i++) {
+              var img = tiles[i].querySelector('img');
+              if (!img) continue;
+              var src = img.src || img.getAttribute('data-src') || '';
+              if (!src.startsWith('http')) continue;
+              var title = tiles[i].getAttribute('data-title') || img.alt || '';
+              results.push({src: src, title: title.trim()});
+            }
+
+            // Strategy 2: Any <img> wider than 50px with an http src
+            if (results.length < count) {
+              var imgs = document.querySelectorAll('img');
+              for (var j = 0; j < imgs.length && results.length < count; j++) {
+                var img = imgs[j];
+                var src = img.src || img.getAttribute('data-src') || '';
+                if (!src.startsWith('http')) continue;
+                if ((img.naturalWidth || img.width || 0) < 50) continue;
+                var alreadyAdded = false;
+                for (var k = 0; k < results.length; k++) {
+                  if (results[k].src === src) { alreadyAdded = true; break; }
+                }
+                if (!alreadyAdded) {
+                  results.push({src: src, title: (img.alt || '').trim()});
+                }
+              }
+            }
+
+            return JSON.stringify(results);
+          })()
+        ''',
+      });
+
+      if (jsResult.isError) {
+        return ToolResult.error('Could not extract images: ${jsResult.content}');
       }
-      final vqd = vqdMatch.group(1)!;
 
-      // Step 2: fetch image results
-      final imgResponse = await _dio.get<Map<String, dynamic>>(
-        'https://duckduckgo.com/i.js',
-        queryParameters: {
-          'l': 'us-en',
-          'o': 'json',
-          'q': query,
-          'vqd': vqd,
-          'f': ',,,,,',
-          'p': '1',
-        },
-        options: Options(
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (compatible; FlutterClaw/1.0; +https://flutterclaw.ai)',
-            'Referer': 'https://duckduckgo.com/',
-          },
-          validateStatus: (s) => s != null && s < 400,
-          receiveTimeout: const Duration(seconds: 15),
-        ),
-      );
-
-      if (imgResponse.data == null) {
-        return ToolResult.error('Image search returned no data');
-      }
-
-      final results = (imgResponse.data!['results'] as List<dynamic>?) ?? [];
-      if (results.isEmpty) {
+      final raw = jsResult.content.trim();
+      if (raw.isEmpty || raw == 'null' || raw == '[]') {
         return ToolResult.success('No images found for: $query');
       }
 
-      return _formatResults(query, results.take(count), (r) {
-        final m = r as Map<String, dynamic>;
-        return (
-          imageUrl: m['image'] as String? ?? '',
-          title: m['title'] as String? ?? '',
-          sourceUrl: m['url'] as String? ?? '',
-        );
-      });
+      final List<dynamic> items = jsonDecode(raw) as List<dynamic>;
+      if (items.isEmpty) {
+        return ToolResult.success('No images found for: $query');
+      }
+
+      final lines = <String>['Found images for "$query":\n'];
+      var i = 1;
+      for (final item in items) {
+        final m = item as Map<String, dynamic>;
+        final src = m['src'] as String? ?? '';
+        if (src.isEmpty) continue;
+        final title = (m['title'] as String? ?? '').isNotEmpty
+            ? m['title'] as String
+            : 'Image $i';
+        final safeTitle = title.replaceAll('[', r'\[').replaceAll(']', r'\]');
+        lines.add('$i. $title');
+        lines.add('   ![$safeTitle]($src)');
+        lines.add('');
+        i++;
+      }
+      if (i == 1) return ToolResult.success('No images found for: $query');
+      return ToolResult.success(lines.join('\n'));
     } catch (e) {
       return ToolResult.error('Image search failed: $e');
     }
@@ -547,58 +573,47 @@ class WebImageSearchTool extends Tool {
     WebSearchProviderConfig cfg,
   ) async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<String>(
         'https://api.search.brave.com/res/v1/images/search',
         queryParameters: {'q': query, 'count': count},
         options: Options(
           headers: {'X-Subscription-Token': cfg.apiKey!},
+          responseType: ResponseType.plain,
           validateStatus: (s) => s != null && s < 400,
           receiveTimeout: const Duration(seconds: 15),
         ),
       );
 
-      if (response.data == null) {
+      if (response.data == null || response.data!.isEmpty) {
         return ToolResult.error('Brave image search API failed');
       }
 
-      final results = (response.data!['results'] as List<dynamic>?) ?? [];
+      final parsed = jsonDecode(response.data!) as Map<String, dynamic>;
+      final results = (parsed['results'] as List<dynamic>?) ?? [];
       if (results.isEmpty) {
         return ToolResult.success('No images found for: $query');
       }
 
-      return _formatResults(query, results.take(count), (r) {
-        final m = r as Map<String, dynamic>;
+      final lines = <String>['Found images for "$query":\n'];
+      var i = 1;
+      for (final item in results.take(count)) {
+        final m = item as Map<String, dynamic>;
         final props = m['properties'] as Map<String, dynamic>? ?? {};
-        return (
-          imageUrl: props['url'] as String? ?? '',
-          title: m['title'] as String? ?? '',
-          sourceUrl: m['url'] as String? ?? '',
-        );
-      });
+        final src = props['url'] as String? ?? '';
+        if (src.isEmpty) continue;
+        final title = (m['title'] as String? ?? '').isNotEmpty
+            ? m['title'] as String
+            : 'Image $i';
+        final safeTitle = title.replaceAll('[', r'\[').replaceAll(']', r'\]');
+        lines.add('$i. $title');
+        lines.add('   ![$safeTitle]($src)');
+        lines.add('');
+        i++;
+      }
+      if (i == 1) return ToolResult.success('No images found for: $query');
+      return ToolResult.success(lines.join('\n'));
     } catch (e) {
       return ToolResult.error('Brave image search failed: $e');
     }
-  }
-
-  ToolResult _formatResults(
-    String query,
-    Iterable<dynamic> items,
-    ({String imageUrl, String title, String sourceUrl}) Function(dynamic)
-        extract,
-  ) {
-    final lines = <String>['Found images for "$query":\n'];
-    var i = 1;
-    for (final item in items) {
-      final r = extract(item);
-      if (r.imageUrl.isEmpty) continue;
-      final title = r.title.isNotEmpty ? r.title : 'Image $i';
-      lines.add('$i. $title');
-      lines.add('   ![${title.replaceAll('[', r'\[').replaceAll(']', r'\]')}](${r.imageUrl})');
-      if (r.sourceUrl.isNotEmpty) lines.add('   Source: ${r.sourceUrl}');
-      lines.add('');
-      i++;
-    }
-    if (i == 1) return ToolResult.success('No images found for: $query');
-    return ToolResult.success(lines.join('\n'));
   }
 }

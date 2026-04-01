@@ -349,7 +349,6 @@ final toolRegistryProvider = Provider<ToolRegistry>((ref) {
   registry.register(ListDirTool(wsPath));
   registry.register(AppendFileTool(wsPath));
   registry.register(WebSearchTool(config: configManager.config));
-  registry.register(WebImageSearchTool(config: configManager.config));
   // Late reference so the callback can access the browser's current user agent
   // (the closure is defined inside the constructor, before the variable is assigned).
   late final HeadlessBrowserTool headlessBrowser;
@@ -447,6 +446,7 @@ final toolRegistryProvider = Provider<ToolRegistry>((ref) {
     },
   );
   registry.register(WebFetchTool(headlessBrowser: headlessBrowser));
+  registry.register(WebImageSearchTool(config: configManager.config, headlessBrowser: headlessBrowser));
   registry.register(HttpRequestTool());
   registry.register(ImageGenTool(configManager: configManager));
   registry.register(TtsTool(ref.read(textToSpeechServiceProvider)));
