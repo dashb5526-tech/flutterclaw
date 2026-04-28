@@ -1044,7 +1044,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                   FilledButton(
                     onPressed: () async {
                       if (nameCtl.text.trim().isEmpty ||
-                          taskCtl.text.trim().isEmpty) return;
+                          taskCtl.text.trim().isEmpty) {
+                        return;
+                      }
                       final cronService = ref.read(cronServiceProvider);
                       await cronService.addJob(CronJob(
                         name: nameCtl.text.trim(),

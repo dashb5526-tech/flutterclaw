@@ -436,7 +436,7 @@ class FlutterClawTaskHandler extends TaskHandler {
         );
       } else {
         _consecutiveFailures++;
-        _log.warning('Gateway health check failed (${_consecutiveFailures}/3)');
+        _log.warning('Gateway health check failed ($_consecutiveFailures/3)');
 
         if (_consecutiveFailures >= 3 && !_isRetrying) {
           _log.severe('Gateway unhealthy after 3 checks, attempting restart');

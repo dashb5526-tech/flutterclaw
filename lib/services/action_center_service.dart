@@ -202,9 +202,13 @@ class ActionCenterService {
       // Sort: unread first, then by date descending
       _items.sort((a, b) {
         if (a.status == ActionItemStatus.unread &&
-            b.status != ActionItemStatus.unread) return -1;
+            b.status != ActionItemStatus.unread) {
+          return -1;
+        }
         if (b.status == ActionItemStatus.unread &&
-            a.status != ActionItemStatus.unread) return 1;
+            a.status != ActionItemStatus.unread) {
+          return 1;
+        }
         return b.createdAt.compareTo(a.createdAt);
       });
       if (_items.length > maxItems) {

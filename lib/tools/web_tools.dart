@@ -364,7 +364,9 @@ class WebFetchTool extends Tool {
             return;
           case 'p':
           case 'div':
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             buffer.writeln();
             return;
           case 'br':
@@ -390,16 +392,22 @@ class WebFetchTool extends Tool {
             return;
           case 'li':
             buffer.write('- ');
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             buffer.writeln();
             return;
           case 'ul':
           case 'ol':
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             buffer.writeln();
             return;
           default:
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             return;
         }
       }

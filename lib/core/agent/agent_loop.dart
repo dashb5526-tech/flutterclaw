@@ -157,7 +157,7 @@ class AgentLoop {
     buf.writeln('## Device');
     buf.writeln('You are controlling a **$model** by **${d['manufacturer']}** (brand: ${d['brand']}).');
     buf.writeln('- Android $androidVer (API $sdkInt)');
-    buf.writeln('- Screen: ${screenW}x${screenH} px');
+    buf.writeln('- Screen: ${screenW}x$screenH px');
     buf.writeln('- **Device language: $deviceLang ($deviceLocale)**');
     buf.writeln();
     buf.writeln('You are the user\'s personal Android expert. You have used this exact $model '
@@ -234,7 +234,7 @@ class AgentLoop {
     // Gesture navigation awareness
     buf.writeln('## Navigation');
     if (sdkInt >= 29) { // Android 10+
-      buf.writeln('Android ${androidVer} likely uses **gesture navigation** (no visible nav buttons):');
+      buf.writeln('Android $androidVer likely uses **gesture navigation** (no visible nav buttons):');
       buf.writeln('- Back: swipe from left or right edge toward center.');
       buf.writeln('- Home: swipe up from bottom edge.');
       buf.writeln('- Recents: swipe up from bottom and hold.');

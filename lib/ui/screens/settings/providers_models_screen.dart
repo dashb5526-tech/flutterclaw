@@ -337,7 +337,7 @@ class _ProvidersModelsScreenState extends ConsumerState<ProvidersModelsScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: DropdownButtonFormField<String?>(
-                  value: _resolvedLiveVoiceSelection(config),
+                  initialValue: _resolvedLiveVoiceSelection(config),
                   isExpanded: true,
                   decoration: InputDecoration(
                     border: InputBorder.none,
@@ -399,7 +399,7 @@ class _ProvidersModelsScreenState extends ConsumerState<ProvidersModelsScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: DropdownButtonFormField<String>(
-                  value: kLiveVoices.containsKey(
+                  initialValue: kLiveVoices.containsKey(
                           config.agents.defaults.liveVoiceName)
                       ? config.agents.defaults.liveVoiceName
                       : 'Puck',
@@ -1524,7 +1524,9 @@ class _AddModelScreenState extends ConsumerState<_AddModelScreen> {
     if (_selectedProviderId == 'bedrock') {
       if (_awsRegionCtl.text.trim().isEmpty) return false;
       if (_modelAwsAuthMode == 'sigv4' &&
-          _awsSecretKeyCtl.text.trim().isEmpty) return false;
+          _awsSecretKeyCtl.text.trim().isEmpty) {
+        return false;
+      }
     }
     return true;
   }

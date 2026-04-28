@@ -70,8 +70,8 @@ class UiAutomationService {
   /// Launch an app by package name or search by label.
   Future<Map<String, dynamic>> launchApp({String? package_, String? search}) =>
       _invoke('ui_launch_app', {
-        if (package_ != null) 'package': package_,
-        if (search != null) 'search': search,
+        'package': ?package_,
+        'search': ?search,
       });
 
   /// Fire an Android intent with optional action, URI, type, package, extras.
@@ -83,11 +83,11 @@ class UiAutomationService {
     Map<String, dynamic>? extras,
   }) =>
       _invoke('ui_launch_intent', {
-        if (action != null) 'action': action,
-        if (uri != null) 'uri': uri,
-        if (type != null) 'type': type,
-        if (package_ != null) 'package': package_,
-        if (extras != null) 'extras': extras,
+        'action': ?action,
+        'uri': ?uri,
+        'type': ?type,
+        'package': ?package_,
+        'extras': ?extras,
       });
 
   /// List exported activities and intent filters of a specific app.
@@ -101,7 +101,7 @@ class UiAutomationService {
   }) =>
       _invoke('ui_list_apps', {
         'launchable_only': launchableOnly,
-        if (search != null) 'search': search,
+        'search': ?search,
       });
 
   // ─── Internal ──────────────────────────────────────────────────────────────
