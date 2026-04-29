@@ -1,8 +1,6 @@
 /// Utility for signaling cancellation across the agent loop and providers.
 library;
 
-import 'dart:async';
-
 class CancellationToken {
   final List<void Function()> _listeners = [];
   bool _isCancelled = false;

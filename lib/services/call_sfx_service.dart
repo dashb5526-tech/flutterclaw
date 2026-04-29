@@ -1,3 +1,5 @@
+// ignore_for_file: duplicate_ignore, experimental_member_use
+
 /// Short sound effects for live call lifecycle events (connect / end).
 ///
 /// Tones are generated programmatically as raw PCM — no asset files needed.
@@ -129,14 +131,20 @@ class CallSfxService {
 
     final header = ByteData(44);
     // RIFF
-    header.setUint8(0, 0x52); header.setUint8(1, 0x49);
-    header.setUint8(2, 0x46); header.setUint8(3, 0x46);
+    header.setUint8(0, 0x52);
+    header.setUint8(1, 0x49);
+    header.setUint8(2, 0x46);
+    header.setUint8(3, 0x46);
     header.setUint32(4, 36 + dataSize, Endian.little);
-    header.setUint8(8, 0x57); header.setUint8(9, 0x41);
-    header.setUint8(10, 0x56); header.setUint8(11, 0x45);
+    header.setUint8(8, 0x57);
+    header.setUint8(9, 0x41);
+    header.setUint8(10, 0x56);
+    header.setUint8(11, 0x45);
     // fmt
-    header.setUint8(12, 0x66); header.setUint8(13, 0x6D);
-    header.setUint8(14, 0x74); header.setUint8(15, 0x20);
+    header.setUint8(12, 0x66);
+    header.setUint8(13, 0x6D);
+    header.setUint8(14, 0x74);
+    header.setUint8(15, 0x20);
     header.setUint32(16, 16, Endian.little);
     header.setUint16(20, 1, Endian.little);
     header.setUint16(22, channels, Endian.little);
@@ -145,8 +153,10 @@ class CallSfxService {
     header.setUint16(32, blockAlign, Endian.little);
     header.setUint16(34, bitsPerSample, Endian.little);
     // data
-    header.setUint8(36, 0x64); header.setUint8(37, 0x61);
-    header.setUint8(38, 0x74); header.setUint8(39, 0x61);
+    header.setUint8(36, 0x64);
+    header.setUint8(37, 0x61);
+    header.setUint8(38, 0x74);
+    header.setUint8(39, 0x61);
     header.setUint32(40, dataSize, Endian.little);
 
     final result = Uint8List(44 + pcm.length);
@@ -165,6 +175,7 @@ class CallSfxService {
 // Simple in-memory StreamAudioSource for just_audio.
 // ---------------------------------------------------------------------------
 
+// ignore: experimental_member_use
 class _BufferAudioSource extends StreamAudioSource {
   final Uint8List _buffer;
   _BufferAudioSource(this._buffer);

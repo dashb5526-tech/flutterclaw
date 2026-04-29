@@ -19,7 +19,13 @@ class MessageBubble extends ConsumerStatefulWidget {
   final VoidCallback? onKillProcess;
   final void Function(String data)? onStdinWrite;
 
-  const MessageBubble({super.key, required this.message, required this.onCopy, this.onKillProcess, this.onStdinWrite});
+  const MessageBubble({
+    super.key,
+    required this.message,
+    required this.onCopy,
+    this.onKillProcess,
+    this.onStdinWrite,
+  });
 
   @override
   ConsumerState<MessageBubble> createState() => _MessageBubbleState();
@@ -96,7 +102,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       maxWidth: MediaQuery.of(context).size.width * 0.75,
                     ),
                     margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isUser
                           ? colors.primary
@@ -108,33 +117,41 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                         bottomRight: Radius.circular(isUser ? 4 : 16),
                       ),
                     ),
-                    child: widget.message.isStreaming && widget.message.text.isEmpty
+                    child:
+                        widget.message.isStreaming &&
+                            widget.message.text.isEmpty
                         ? const TypingIndicator()
                         : isUser
-                            ? Text(
-                                widget.message.text,
-                                style: TextStyle(
-                                  color: colors.onPrimary,
-                                  fontSize: 15,
+                        ? Text(
+                            widget.message.text,
+                            style: TextStyle(
+                              color: colors.onPrimary,
+                              fontSize: 15,
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildAssistantText(context, theme, colors),
+                              if (!widget.message.isStreaming &&
+                                  widget.message.usage != null) ...[
+                                const SizedBox(height: 8),
+                                _buildTokenUsage(
+                                  context,
+                                  colors,
+                                  widget.message.usage!,
                                 ),
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildAssistantText(context, theme, colors),
-                                  if (!widget.message.isStreaming && widget.message.usage != null) ...[
-                                    const SizedBox(height: 8),
-                                    _buildTokenUsage(context, colors, widget.message.usage!),
-                                  ],
-                                ],
-                              ),
+                              ],
+                            ],
+                          ),
                   ),
                 ),
                 // TTS speaking indicator — shown while this message is being read
                 Consumer(
                   builder: (ctx, ref2, _) {
                     final speaking = ref2.watch(ttsSpeakingMsgProvider);
-                    if (speaking != widget.message.text) return const SizedBox.shrink();
+                    if (speaking != widget.message.text)
+                      return const SizedBox.shrink();
                     return Positioned(
                       top: 0,
                       right: isUser ? null : -10,
@@ -164,9 +181,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ],
             ),
           ),
-          if (isUser) ...[
-            const SizedBox(width: 6),
-          ],
+          if (isUser) ...[const SizedBox(width: 6)],
         ],
       ),
     );
@@ -176,13 +191,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final msg = widget.message;
     final colors = Theme.of(context).colorScheme;
 
-    final bool canSpeak = !msg.isToolStatus &&
+    final bool canSpeak =
+        !msg.isToolStatus &&
         !msg.isError &&
         !msg.isDocumentMessage &&
         msg.imageData == null &&
         msg.text.trim().isNotEmpty;
 
-    final bool canSelectText = !msg.isToolStatus &&
+    final bool canSelectText =
+        !msg.isToolStatus &&
         !msg.isDocumentMessage &&
         msg.imageData == null &&
         msg.text.trim().isNotEmpty;
@@ -230,7 +247,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       onTap: () async {
                         // Capture ref values BEFORE pop — pop disposes the sheet's ref2
                         final tts = ref2.read(textToSpeechServiceProvider);
-                        final notifier = ref2.read(ttsSpeakingMsgProvider.notifier);
+                        final notifier = ref2.read(
+                          ttsSpeakingMsgProvider.notifier,
+                        );
                         Navigator.pop(sheetCtx);
                         if (isThisMsg) {
                           await tts.stop();
@@ -315,8 +334,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     s = s.replaceAll('\n', ' ');
     return s.trim();
   }
-  
-  Widget _buildTokenUsage(BuildContext context, ColorScheme colors, dynamic usage) {
+
+  Widget _buildTokenUsage(
+    BuildContext context,
+    ColorScheme colors,
+    dynamic usage,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -350,7 +373,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     );
   }
 
-  Widget _buildAssistantText(BuildContext context, ThemeData theme, ColorScheme colors) {
+  Widget _buildAssistantText(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colors,
+  ) {
     final text = widget.message.text;
 
     // Check if the text is pure JSON from shell command (contains exit_code, stdout, stderr)
@@ -364,10 +391,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             json.containsKey('stdout') &&
             json.containsKey('stderr')) {
           // Render as xterm terminal output
-          return TerminalOutput(
-            command: 'shell',
-            output: jsonEncode(json),
-          );
+          return TerminalOutput(command: 'shell', output: jsonEncode(json));
         }
         // It's valid JSON but not a shell result - show as plain text
         return SelectableText(
@@ -390,11 +414,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     // before the parser sees them (prevents _inlines.isEmpty assertion).
     return MarkdownBody(
       key: ValueKey(text.length),
-      data: widget.message.isStreaming ? _sanitizeStreamingMarkdown(text) : text,
+      data: widget.message.isStreaming
+          ? _sanitizeStreamingMarkdown(text)
+          : text,
       selectable: false,
-      builders: {
-        'pre': CopyableCodeBlockBuilder(context),
-      },
+      builders: {'pre': CopyableCodeBlockBuilder(context)},
       sizedImageBuilder: (config) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -414,7 +438,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.broken_image, size: 18, color: colors.onSurfaceVariant),
+                    Icon(
+                      Icons.broken_image,
+                      size: 18,
+                      color: colors.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
@@ -457,14 +485,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           fontWeight: FontWeight.w600,
           height: 1.3,
         ),
-        strong: TextStyle(
-          color: colors.onSurface,
-          fontWeight: FontWeight.bold,
-        ),
-        em: TextStyle(
-          color: colors.onSurface,
-          fontStyle: FontStyle.italic,
-        ),
+        strong: TextStyle(color: colors.onSurface, fontWeight: FontWeight.bold),
+        em: TextStyle(color: colors.onSurface, fontStyle: FontStyle.italic),
         code: TextStyle(
           fontFamily: 'monospace',
           fontSize: 14,
@@ -486,18 +508,26 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             topRight: Radius.circular(4),
             bottomRight: Radius.circular(4),
           ),
-          border: Border(
-            left: BorderSide(color: colors.primary, width: 3),
-          ),
+          border: Border(left: BorderSide(color: colors.primary, width: 3)),
         ),
-        blockquotePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        a: TextStyle(color: colors.primary, decoration: TextDecoration.underline),
+        blockquotePadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 8,
+        ),
+        a: TextStyle(
+          color: colors.primary,
+          decoration: TextDecoration.underline,
+        ),
         listBullet: TextStyle(color: colors.onSurface),
       ),
     );
   }
 
-  Widget _buildToolPill(BuildContext context, ThemeData theme, ColorScheme colors) {
+  Widget _buildToolPill(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colors,
+  ) {
     final running = widget.message.isStreaming == true;
     final hasResult = widget.message.toolResultText != null;
     final isShellTool = widget.message.text.startsWith('run_shell_command');
@@ -540,11 +570,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.build_circle,
-                    size: 14,
-                    color: colors.primary,
-                  ),
+                  Icon(Icons.build_circle, size: 14, color: colors.primary),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
@@ -610,7 +636,6 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     );
   }
 
-
   /// Renders a `/btw` ephemeral response with a dashed border and flash icon
   /// to make it visually distinct from regular assistant messages.
   Widget _buildBtwBubble(BuildContext context, ThemeData theme) {
@@ -626,11 +651,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             height: 28,
             margin: const EdgeInsets.only(right: 6, bottom: 4),
             alignment: Alignment.center,
-            child: Icon(
-              Icons.bolt_outlined,
-              size: 18,
-              color: colors.tertiary,
-            ),
+            child: Icon(Icons.bolt_outlined, size: 18, color: colors.tertiary),
           ),
           Flexible(
             child: GestureDetector(
@@ -640,7 +661,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   maxWidth: MediaQuery.of(context).size.width * 0.75,
                 ),
                 margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: colors.tertiaryContainer.withValues(alpha: 0.5),
                   borderRadius: const BorderRadius.only(
@@ -686,7 +710,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                           fontFamily: 'monospace',
                           fontSize: 13,
                           color: colors.onTertiaryContainer,
-                          backgroundColor: colors.tertiary.withValues(alpha: 0.1),
+                          backgroundColor: colors.tertiary.withValues(
+                            alpha: 0.1,
+                          ),
                         ),
                         codeblockDecoration: BoxDecoration(
                           color: colors.tertiary.withValues(alpha: 0.08),
@@ -694,7 +720,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                         ),
                       ),
                       builders: {'pre': CopyableCodeBlockBuilder(context)},
-                      onTapLink: (_, href, __) async {
+                      onTapLink: (_, href, _) async {
                         if (href != null) {
                           final uri = Uri.tryParse(href);
                           if (uri != null) await launchUrl(uri);
@@ -773,17 +799,17 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                         children: block.buttons.map((btn) {
                           final (bgColor, fgColor) = switch (btn.style) {
                             InteractiveButtonStyle.success => (
-                                colors.tertiary,
-                                colors.onTertiary,
-                              ),
+                              colors.tertiary,
+                              colors.onTertiary,
+                            ),
                             InteractiveButtonStyle.danger => (
-                                colors.error,
-                                colors.onError,
-                              ),
+                              colors.error,
+                              colors.onError,
+                            ),
                             InteractiveButtonStyle.secondary => (
-                                colors.surfaceContainerHigh,
-                                colors.onSurface,
-                              ),
+                              colors.surfaceContainerHigh,
+                              colors.onSurface,
+                            ),
                             _ => (colors.primary, colors.onPrimary),
                           };
                           return FilledButton(
@@ -812,9 +838,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: _InteractiveSelect(
                         block: block,
-                        onSelected: (value) => ref
-                            .read(chatProvider.notifier)
-                            .sendMessage(value),
+                        onSelected: (value) =>
+                            ref.read(chatProvider.notifier).sendMessage(value),
                       ),
                     );
                   }
@@ -884,16 +909,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     String command = 'alpine-shell';
 
     // Extract command from markdown: ```\n$ command\noutput\n```
-    final codeBlockMatch = RegExp(r'```\n\$ (.+?)\n([\s\S]*?)```').firstMatch(outputText);
+    final codeBlockMatch = RegExp(
+      r'```\n\$ (.+?)\n([\s\S]*?)```',
+    ).firstMatch(outputText);
     if (codeBlockMatch != null) {
       command = codeBlockMatch.group(1) ?? command;
       outputText = codeBlockMatch.group(2) ?? '';
     }
 
-    return TerminalOutput(
-      command: command,
-      output: outputText.trim(),
-    );
+    return TerminalOutput(command: command, output: outputText.trim());
   }
 
   Widget _buildImageBubble(BuildContext context, ThemeData theme) {
@@ -936,7 +960,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 ),
                 if (caption.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: Text(
                       caption,
                       style: TextStyle(
@@ -959,7 +986,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final mimeType = widget.message.documentMimeType ?? 'application/pdf';
     final isPdf = mimeType == 'application/pdf';
     final caption = widget.message.text.trim();
-    final displayCaption = caption.isNotEmpty && caption != fileName ? caption : null;
+    final displayCaption = caption.isNotEmpty && caption != fileName
+        ? caption
+        : null;
 
     final base64Data = widget.message.documentData;
     final fileSizeLabel = base64Data != null
@@ -998,7 +1027,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: isUser
                       ? theme.colorScheme.onPrimary.withValues(alpha: 0.12)
@@ -1058,13 +1090,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            [
-                              ?fileSizeLabel,
-                              ext,
-                            ].nonNulls.join(' · '),
+                            [?fileSizeLabel, ext].nonNulls.join(' · '),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: isUser
-                                  ? theme.colorScheme.onPrimary.withValues(alpha: 0.7)
+                                  ? theme.colorScheme.onPrimary.withValues(
+                                      alpha: 0.7,
+                                    )
                                   : theme.colorScheme.onSurfaceVariant,
                               fontSize: 12,
                             ),
@@ -1282,10 +1313,7 @@ class _InteractiveSelectState extends State<_InteractiveSelect> {
       ),
       items: widget.block.options
           .map(
-            (opt) => DropdownMenuItem(
-              value: opt.value,
-              child: Text(opt.label),
-            ),
+            (opt) => DropdownMenuItem(value: opt.value, child: Text(opt.label)),
           )
           .toList(),
       onChanged: (value) {
@@ -1296,4 +1324,3 @@ class _InteractiveSelectState extends State<_InteractiveSelect> {
     );
   }
 }
-
