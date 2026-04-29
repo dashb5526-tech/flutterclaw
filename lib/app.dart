@@ -1,5 +1,3 @@
-import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_analytics/observer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +14,9 @@ ThemeData _buildTheme(Brightness brightness) {
     useMaterial3: true,
     brightness: brightness,
     extensions: [
-      brightness == Brightness.dark ? SemanticColors.dark : SemanticColors.light,
+      brightness == Brightness.dark
+          ? SemanticColors.dark
+          : SemanticColors.light,
     ],
   );
 }
@@ -29,8 +29,6 @@ class FlutterClawApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final analytics = FirebaseAnalytics.instance;
-
     return ProviderScope(
       child: MaterialApp(
         navigatorKey: FlutterClawApp.navigatorKey,
@@ -68,9 +66,7 @@ class FlutterClawApp extends StatelessWidget {
           Locale('cs'), // Czech
         ],
         home: const _AppRoot(),
-        navigatorObservers: [
-          FirebaseAnalyticsObserver(analytics: analytics),
-        ],
+        navigatorObservers: const [],
       ),
     );
   }
@@ -86,9 +82,7 @@ class _AppRoot extends ConsumerWidget {
     return initAsync.when(
       data: (_) {
         final needsOnboarding = ref.watch(onboardingRequiredProvider);
-        return needsOnboarding
-            ? const OnboardingScreen()
-            : const HomeScreen();
+        return needsOnboarding ? const OnboardingScreen() : const HomeScreen();
       },
       loading: () => Scaffold(
         body: Center(
@@ -102,13 +96,31 @@ class _AppRoot extends ConsumerWidget {
           ),
         ),
       ),
-      error: (e, _) => Scaffold(
+      error: (error, stack) => Scaffold(
         body: Center(
           child: Padding(
-            padding: EdgeInsets.all(32),
-            child: Text(
-              context.l10n.appInitializationError('$e'),
-              textAlign: TextAlign.center,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 16),
+                Text(
+                  'Error initializing app',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => ref.invalidate(appInitializedProvider),
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
           ),
         ),

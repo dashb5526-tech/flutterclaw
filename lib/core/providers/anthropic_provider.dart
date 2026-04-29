@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import 'provider_interface.dart';
+import '../agent/cancel_token.dart';
 import 'openai_provider.dart';
 
 /// Anthropic Messages API provider using /v1/messages endpoint.
@@ -24,9 +25,15 @@ class AnthropicProvider implements LlmProvider {
   String get defaultApiBase => 'https://api.anthropic.com';
 
   @override
-  Future<LlmResponse> chatCompletion(LlmRequest request) async {
+  Future<LlmResponse> chatCompletion(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  }) async {
     final url = _buildUrl(request.apiBase);
     final body = buildBody(request, stream: false);
+
+    final dioCancelToken = CancelToken();
+    cancelToken?.addListener(() => dioCancelToken.cancel());
 
     try {
       final response = await _dio.post<Map<String, dynamic>>(
@@ -48,6 +55,7 @@ class AnthropicProvider implements LlmProvider {
             seconds: request.timeoutSeconds ?? 120,
           ),
         ),
+        cancelToken: dioCancelToken,
       );
 
       return parseNonStreamResponse(response.data!);
@@ -57,9 +65,15 @@ class AnthropicProvider implements LlmProvider {
   }
 
   @override
-  Stream<LlmStreamEvent> chatCompletionStream(LlmRequest request) async* {
+  Stream<LlmStreamEvent> chatCompletionStream(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  }) async* {
     final url = _buildUrl(request.apiBase);
     final body = buildBody(request, stream: true);
+
+    final dioCancelToken = CancelToken();
+    cancelToken?.addListener(() => dioCancelToken.cancel());
 
     Response<ResponseBody> response;
     try {
@@ -82,8 +96,10 @@ class AnthropicProvider implements LlmProvider {
             seconds: request.timeoutSeconds ?? 120,
           ),
         ),
+        cancelToken: dioCancelToken,
       );
     } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) return;
       throw _handleDioError(e);
     }
 

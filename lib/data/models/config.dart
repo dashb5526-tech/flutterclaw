@@ -133,6 +133,10 @@ class AgentsDefaults {
   /// automatic compaction will be triggered.
   final double autoCompactThreshold;
 
+  /// Maximum number of recent conversation turns to keep in context (after the
+  /// compaction summary). Default: 15.
+  final int maxContextTurns;
+
   /// Run a silent memory-flush turn before compacting so the agent can persist
   /// important facts to memory/MEMORY.md before old messages are summarized
   /// away (default: true). Matches OpenClaw's compaction.memoryFlush behavior.
@@ -168,6 +172,7 @@ class AgentsDefaults {
     this.maxToolResultTokens = 50000,
     this.autoCompactEnabled = true,
     this.autoCompactThreshold = 0.85,
+    this.maxContextTurns = 50,
     this.memoryFlushEnabled = true,
     this.typingMode = 'instant',
     this.liveVoiceModelId,
@@ -187,6 +192,7 @@ class AgentsDefaults {
     autoCompactEnabled: json['auto_compact_enabled'] as bool? ?? true,
     autoCompactThreshold:
         (json['auto_compact_threshold'] as num?)?.toDouble() ?? 0.85,
+    maxContextTurns: json['max_context_turns'] as int? ?? 15,
     memoryFlushEnabled: json['memory_flush_enabled'] as bool? ?? true,
     typingMode: json['typing_mode'] as String? ?? 'instant',
     liveVoiceModelId: json['live_voice_model_id'] as String?,
@@ -205,6 +211,7 @@ class AgentsDefaults {
     'max_tool_result_tokens': maxToolResultTokens,
     'auto_compact_enabled': autoCompactEnabled,
     'auto_compact_threshold': autoCompactThreshold,
+    'max_context_turns': maxContextTurns,
     'memory_flush_enabled': memoryFlushEnabled,
     'typing_mode': typingMode,
     if (liveVoiceModelId != null) 'live_voice_model_id': liveVoiceModelId,
@@ -222,6 +229,7 @@ class AgentsDefaults {
     int? maxToolResultTokens,
     bool? autoCompactEnabled,
     double? autoCompactThreshold,
+    int? maxContextTurns,
     bool? memoryFlushEnabled,
     String? typingMode,
     String? liveVoiceModelId,
@@ -239,6 +247,7 @@ class AgentsDefaults {
       maxToolResultTokens: maxToolResultTokens ?? this.maxToolResultTokens,
       autoCompactEnabled: autoCompactEnabled ?? this.autoCompactEnabled,
       autoCompactThreshold: autoCompactThreshold ?? this.autoCompactThreshold,
+      maxContextTurns: maxContextTurns ?? this.maxContextTurns,
       memoryFlushEnabled: memoryFlushEnabled ?? this.memoryFlushEnabled,
       typingMode: typingMode ?? this.typingMode,
       liveVoiceModelId: clearLiveVoiceModelId

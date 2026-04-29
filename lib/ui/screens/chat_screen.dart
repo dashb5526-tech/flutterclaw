@@ -337,7 +337,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   Widget build(BuildContext context) {
     final messages = ref.watch(chatProvider);
-    final isProcessing = ref.read(chatProvider.notifier).isProcessing;
+    final isProcessing = ref.watch(chatProcessingProvider);
     final modelSupportsVision = ref.watch(activeModelSupportsVisionProvider);
     final activeAgent = ref.watch(activeAgentProvider);
     final liveStatus = ref.watch(liveSessionProvider).status;
@@ -356,7 +356,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             IconButton(
               icon: const Icon(Icons.add_comment_outlined),
               tooltip: context.l10n.newSession,
-              onPressed: () => ref.read(chatProvider.notifier).clear(),
+              onPressed: () => unawaited(ref.read(chatProvider.notifier).clear()),
             ),
           ],
         ),

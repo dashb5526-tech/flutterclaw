@@ -67,8 +67,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   String _parseAgentEmoji() {
     final identity = _files['IDENTITY.md'] ?? '';
-    final emojiMatch =
-        RegExp(r'(?:Emoji|emoji)[:\s]+(.+)').firstMatch(identity);
+    final emojiMatch = RegExp(
+      r'(?:Emoji|emoji)[:\s]+(.+)',
+    ).firstMatch(identity);
     var raw = emojiMatch?.group(1)?.trim() ?? '';
     raw = raw.replaceAll('*', '').replaceAll('_', '').trim();
     if (raw.isNotEmpty) return raw;
@@ -118,9 +119,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       child: Center(
                         child: Text(
                           agentEmoji.isNotEmpty ? agentEmoji : '🤖',
-                          style: const TextStyle(
-                            fontSize: 28,
-                          ),
+                          style: const TextStyle(fontSize: 28),
                         ),
                       ),
                     ),
@@ -146,8 +145,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.edit),
-                      onPressed: () =>
-                          _showFileEditor(context, 'IDENTITY.md'),
+                      onPressed: () => _showFileEditor(context, 'IDENTITY.md'),
                     ),
                   ],
                 ),
@@ -158,11 +156,13 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
             // Workspace files
             _SectionTitle(title: context.l10n.workspaceFiles),
-            ..._files.entries.map((e) => _FileCard(
-                  fileName: e.key,
-                  preview: _previewText(e.value),
-                  onTap: () => _showFileEditor(context, e.key),
-                )),
+            ..._files.entries.map(
+              (e) => _FileCard(
+                fileName: e.key,
+                preview: _previewText(e.value),
+                onTap: () => _showFileEditor(context, e.key),
+              ),
+            ),
 
             const SizedBox(height: 20),
 
@@ -171,45 +171,49 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             if (sessions.isEmpty)
               Card(
                 child: ListTile(
-                  leading: Icon(Icons.forum_outlined,
-                      color: colors.onSurfaceVariant),
+                  leading: Icon(
+                    Icons.forum_outlined,
+                    color: colors.onSurfaceVariant,
+                  ),
                   title: Text(context.l10n.noActiveSessions),
                   subtitle: Text(context.l10n.startConversationToCreate),
                 ),
               )
             else
-              ...sessions.map((s) => Card(
-                    child: ListTile(
-                      leading: ChannelBrandIcon(
-                        channelType: s.channelType,
-                        size: 24,
-                        iconColor: colors.primary,
-                      ),
-                      title: Text(s.key),
-                      subtitle: Text(
-                        '${s.messageCount} msgs | ${s.totalTokens} tokens | ${_timeAgo(s.lastActivity)}',
-                      ),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (action) async {
-                          if (action == 'reset') {
-                            final sm = ref.read(sessionManagerProvider);
-                            await sm.reset(s.key);
-                            await _loadFiles();
-                          }
-                        },
-                        itemBuilder: (ctx) => [
-                          PopupMenuItem(
-                            value: 'reset',
-                            child: ListTile(
-                              leading: Icon(Icons.delete_outline),
-                              title: Text(context.l10n.reset),
-                              dense: true,
-                            ),
-                          ),
-                        ],
-                      ),
+              ...sessions.map(
+                (s) => Card(
+                  child: ListTile(
+                    leading: ChannelBrandIcon(
+                      channelType: s.channelType,
+                      size: 24,
+                      iconColor: colors.primary,
                     ),
-                  )),
+                    title: Text(s.key),
+                    subtitle: Text(
+                      '${s.messageCount} msgs | ${s.totalTokens} tokens | ${_timeAgo(s.lastActivity)}',
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (action) async {
+                        if (action == 'reset') {
+                          final sm = ref.read(sessionManagerProvider);
+                          await sm.reset(s.key);
+                          await _loadFiles();
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        PopupMenuItem(
+                          value: 'reset',
+                          child: ListTile(
+                            leading: Icon(Icons.delete_outline),
+                            title: Text(context.l10n.reset),
+                            dense: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
 
             const SizedBox(height: 20),
 
@@ -250,8 +254,11 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.check_circle,
-                              size: 14, color: Colors.green.shade800),
+                          Icon(
+                            Icons.check_circle,
+                            size: 14,
+                            color: Colors.green.shade800,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'ClawHub',
@@ -270,7 +277,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     icon: const Icon(Icons.explore, size: 18),
                     label: Text(context.l10n.browseLabel),
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -294,8 +304,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     if (jobs.isEmpty) {
       return Card(
         child: ListTile(
-          leading: Icon(Icons.schedule,
-              color: Theme.of(context).colorScheme.onSurfaceVariant),
+          leading: Icon(
+            Icons.schedule,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           title: Text(context.l10n.noCronJobs),
           subtitle: Text(context.l10n.addScheduledTasks),
         ),
@@ -303,78 +315,74 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
 
     return Column(
-      children: jobs
-          .map((job) {
-            final statusColor = switch (job.lastStatus.name) {
-              'success' => Colors.green,
-              'failed'  => Theme.of(context).colorScheme.error,
-              'running' => Colors.orange,
-              _         => Theme.of(context).colorScheme.onSurfaceVariant,
-            };
-            return Card(
-                child: ListTile(
-                  onTap: () => _showCronJobDetail(context, job),
-                  leading: Icon(
-                    job.enabled ? Icons.timer : Icons.timer_off,
-                    color: job.enabled ? Colors.green : Colors.grey,
-                  ),
-                  title: Text(job.name),
-                  subtitle: Text(
-                    '${job.scheduleDisplay} • ${job.lastStatus.name} • '
-                    'Next: ${job.nextRunAt != null ? _timeAgo(job.nextRunAt!) : "N/A"}',
-                    style: TextStyle(color: statusColor, fontSize: 12),
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (action) async {
-                      if (action == 'run') {
-                        await cronService.runJob(job.id);
-                        setState(() {});
-                      } else if (action == 'toggle') {
-                        await cronService.updateJob(
-                          job.id,
-                          enabled: !job.enabled,
-                        );
-                        setState(() {});
-                      } else if (action == 'delete') {
-                        await cronService.removeJob(job.id);
-                        setState(() {});
-                      }
-                    },
-                    itemBuilder: (ctx) => [
-                      PopupMenuItem(
-                        value: 'run',
-                        child: ListTile(
-                          leading: const Icon(Icons.play_arrow),
-                          title: Text(context.l10n.runNow),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'toggle',
-                        child: ListTile(
-                          leading: Icon(
-                              job.enabled ? Icons.pause : Icons.play_arrow),
-                          title:
-                              Text(job.enabled ? context.l10n.disable : context.l10n.enable),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                          leading:
-                              Icon(Icons.delete_outline, color: Colors.red),
-                          title: Text(context.l10n.delete,
-                              style: TextStyle(color: Colors.red)),
-                          dense: true,
-                        ),
-                      ),
-                    ],
+      children: jobs.map((job) {
+        final statusColor = switch (job.lastStatus.name) {
+          'success' => Colors.green,
+          'failed' => Theme.of(context).colorScheme.error,
+          'running' => Colors.orange,
+          _ => Theme.of(context).colorScheme.onSurfaceVariant,
+        };
+        return Card(
+          child: ListTile(
+            onTap: () => _showCronJobDetail(context, job),
+            leading: Icon(
+              job.enabled ? Icons.timer : Icons.timer_off,
+              color: job.enabled ? Colors.green : Colors.grey,
+            ),
+            title: Text(job.name),
+            subtitle: Text(
+              '${job.scheduleDisplay} • ${job.lastStatus.name} • '
+              'Next: ${job.nextRunAt != null ? _timeAgo(job.nextRunAt!) : "N/A"}',
+              style: TextStyle(color: statusColor, fontSize: 12),
+            ),
+            trailing: PopupMenuButton<String>(
+              onSelected: (action) async {
+                if (action == 'run') {
+                  await cronService.runJob(job.id);
+                  setState(() {});
+                } else if (action == 'toggle') {
+                  await cronService.updateJob(job.id, enabled: !job.enabled);
+                  setState(() {});
+                } else if (action == 'delete') {
+                  await cronService.removeJob(job.id);
+                  setState(() {});
+                }
+              },
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  value: 'run',
+                  child: ListTile(
+                    leading: const Icon(Icons.play_arrow),
+                    title: Text(context.l10n.runNow),
+                    dense: true,
                   ),
                 ),
-              );
-          })
-          .toList(),
+                PopupMenuItem(
+                  value: 'toggle',
+                  child: ListTile(
+                    leading: Icon(job.enabled ? Icons.pause : Icons.play_arrow),
+                    title: Text(
+                      job.enabled ? context.l10n.disable : context.l10n.enable,
+                    ),
+                    dense: true,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    leading: Icon(Icons.delete_outline, color: Colors.red),
+                    title: Text(
+                      context.l10n.delete,
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    dense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -388,18 +396,22 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              Icon(Icons.extension_outlined,
-                  size: 40,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.extension_outlined,
+                size: 40,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(height: 12),
-              Text(context.l10n.noSkillsInstalled,
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                context.l10n.noSkillsInstalled,
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 4),
               Text(
                 context.l10n.browseClawHubToDiscover,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -415,52 +427,59 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
 
     return Column(
-      children: skills.map((skill) => Card(
-        child: ListTile(
-          leading: Text(
-            skill.emoji ?? '🔧',
-            style: const TextStyle(fontSize: 22),
-          ),
-          title: Text(skill.name),
-          subtitle: Text(
-            skill.description.isNotEmpty
-                ? skill.description
-                : skill.location,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+      children: skills
+          .map(
+            (skill) => Card(
+              child: ListTile(
+                leading: Text(
+                  skill.emoji ?? '🔧',
+                  style: const TextStyle(fontSize: 22),
                 ),
-                child: Text(
-                  skill.location,
-                  style: Theme.of(context).textTheme.labelSmall,
+                title: Text(skill.name),
+                subtitle: Text(
+                  skill.description.isNotEmpty
+                      ? skill.description
+                      : skill.location,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        skill.location,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: skill.enabled,
+                      onChanged: (val) {
+                        skillsService.toggleSkill(skill.name, val);
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
+                onTap: () => _showSkillDetail(context, skill),
+                onLongPress: skill.location == 'workspace'
+                    ? () => _confirmRemoveSkill(context, skill.name)
+                    : null,
               ),
-              const SizedBox(width: 8),
-              Switch(
-                value: skill.enabled,
-                onChanged: (val) {
-                  skillsService.toggleSkill(skill.name, val);
-                  setState(() {});
-                },
-              ),
-            ],
-          ),
-          onTap: () => _showSkillDetail(context, skill),
-          onLongPress: skill.location == 'workspace'
-              ? () => _confirmRemoveSkill(context, skill.name)
-              : null,
-        ),
-      )).toList(),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -469,9 +488,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       context,
       MaterialPageRoute(
         builder: (ctx) => Scaffold(
-          appBar: AppBar(
-            title: Text('${skill.emoji ?? '🔧'} ${skill.name}'),
-          ),
+          appBar: AppBar(title: Text('${skill.emoji ?? '🔧'} ${skill.name}')),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: SelectableText(
@@ -544,16 +561,17 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primaryContainer
-                            .withValues(alpha: 0.4),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline,
-                              color: Theme.of(context).colorScheme.primary),
+                          Icon(
+                            Icons.info_outline,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -596,7 +614,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
                           return const Center(
-                              child: CircularProgressIndicator());
+                            child: CircularProgressIndicator(),
+                          );
                         }
                         final results = snapshot.data ?? [];
                         if (results.isEmpty) {
@@ -644,7 +663,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                                   ),
                                 ),
                                 trailing: const Icon(Icons.chevron_right),
-                                onTap: () => _showSkillDetailFromHub(context, skill),
+                                onTap: () =>
+                                    _showSkillDetailFromHub(context, skill),
                               ),
                             );
                           },
@@ -733,10 +753,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Theme.of(ctx)
-                      .colorScheme
-                      .primaryContainer
-                      .withValues(alpha: 0.3),
+                  color: Theme.of(
+                    ctx,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -744,9 +763,11 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.info_outline,
-                            size: 18,
-                            color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                        Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -792,7 +813,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               SnackBar(
-                                content: Text(context.l10n.successfullyConnected),
+                                content: Text(
+                                  context.l10n.successfullyConnected,
+                                ),
                               ),
                             );
                             setState(() {});
@@ -800,7 +823,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                    '${context.l10n.connectionFailed}: ${result.error ?? "Invalid token"}'),
+                                  '${context.l10n.connectionFailed}: ${result.error ?? "Invalid token"}',
+                                ),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -836,9 +860,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
           final dirty = taskCtl.text.trim() != job.task.trim();
           final statusColor = switch (job.lastStatus.name) {
             'success' => Colors.green,
-            'failed'  => colors.error,
+            'failed' => colors.error,
             'running' => Colors.orange,
-            _         => colors.onSurfaceVariant,
+            _ => colors.onSurfaceVariant,
           };
 
           return Padding(
@@ -856,108 +880,119 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                   children: [
                     Expanded(
                       child: Text(job.name, style: theme.textTheme.titleLarge),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    Chip(
+                      avatar: const Icon(Icons.schedule, size: 14),
+                      label: Text(
+                        job.scheduleDisplay,
+                        style: theme.textTheme.labelSmall,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      Chip(
-                        avatar: const Icon(Icons.schedule, size: 14),
-                        label: Text(job.scheduleDisplay,
-                            style: theme.textTheme.labelSmall),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: EdgeInsets.zero,
-                      ),
-                      Chip(
-                        label: Text(job.lastStatus.name,
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: statusColor)),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: EdgeInsets.zero,
-                      ),
-                      if (job.runCount > 0)
-                        Chip(
-                          avatar: const Icon(Icons.replay, size: 14),
-                          label: Text(context.l10n.cronJobRuns(job.runCount),
-                              style: theme.textTheme.labelSmall),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: EdgeInsets.zero,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: EdgeInsets.zero,
+                    ),
+                    Chip(
+                      label: Text(
+                        job.lastStatus.name,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: statusColor,
                         ),
-                    ],
-                  ),
-                  if (job.nextRunAt != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      context.l10n.nextRunLabel(_timeAgo(job.nextRunAt!)),
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: colors.onSurfaceVariant),
+                      ),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: EdgeInsets.zero,
                     ),
+                    if (job.runCount > 0)
+                      Chip(
+                        avatar: const Icon(Icons.replay, size: 14),
+                        label: Text(
+                          context.l10n.cronJobRuns(job.runCount),
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: EdgeInsets.zero,
+                      ),
                   ],
-                  if (job.lastError != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colors.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        context.l10n.lastErrorLabel(job.lastError!),
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: colors.onErrorContainer),
-                      ),
+                ),
+                if (job.nextRunAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    context.l10n.nextRunLabel(_timeAgo(job.nextRunAt!)),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
                     ),
-                  ],
-                  const SizedBox(height: 16),
-                  Text(context.l10n.taskPrompt, style: theme.textTheme.labelLarge),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: taskCtl,
-                    maxLines: 8,
-                    minLines: 4,
-                    onChanged: (_) => setSheetState(() {}),
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      hintText: context.l10n.cronJobHintText,
-                      filled: true,
-                      fillColor: colors.surfaceContainerHighest,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text(context.l10n.cancel),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: dirty
-                            ? () async {
-                                final cronService =
-                                    ref.read(cronServiceProvider);
-                                await cronService.updateJob(
-                                  job.id,
-                                  task: taskCtl.text.trim(),
-                                );
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                setState(() {});
-                              }
-                            : null,
-                        child: Text(context.l10n.save),
-                      ),
-                    ],
                   ),
                 ],
-              ),
+                if (job.lastError != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colors.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      context.l10n.lastErrorLabel(job.lastError!),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  context.l10n.taskPrompt,
+                  style: theme.textTheme.labelLarge,
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: taskCtl,
+                  maxLines: 8,
+                  minLines: 4,
+                  onChanged: (_) => setSheetState(() {}),
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: context.l10n.cronJobHintText,
+                    filled: true,
+                    fillColor: colors.surfaceContainerHighest,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text(context.l10n.cancel),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: dirty
+                          ? () async {
+                              final cronService = ref.read(cronServiceProvider);
+                              await cronService.updateJob(
+                                job.id,
+                                task: taskCtl.text.trim(),
+                              );
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              setState(() {});
+                            }
+                          : null,
+                      child: Text(context.l10n.save),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -984,8 +1019,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.l10n.addCronJob,
-                  style: Theme.of(ctx).textTheme.titleLarge),
+              Text(
+                context.l10n.addCronJob,
+                style: Theme.of(ctx).textTheme.titleLarge,
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: nameCtl,
@@ -1013,18 +1050,34 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                   border: OutlineInputBorder(),
                 ),
                 items: [
-                  DropdownMenuItem(value: 5, child: Text(context.l10n.every5Minutes)),
                   DropdownMenuItem(
-                      value: 15, child: Text(context.l10n.every15Minutes)),
+                    value: 5,
+                    child: Text(context.l10n.every5Minutes),
+                  ),
                   DropdownMenuItem(
-                      value: 30, child: Text(context.l10n.every30Minutes)),
-                  DropdownMenuItem(value: 60, child: Text(context.l10n.everyHour)),
+                    value: 15,
+                    child: Text(context.l10n.every15Minutes),
+                  ),
                   DropdownMenuItem(
-                      value: 360, child: Text(context.l10n.every6Hours)),
+                    value: 30,
+                    child: Text(context.l10n.every30Minutes),
+                  ),
                   DropdownMenuItem(
-                      value: 720, child: Text(context.l10n.every12Hours)),
+                    value: 60,
+                    child: Text(context.l10n.everyHour),
+                  ),
                   DropdownMenuItem(
-                      value: 1440, child: Text(context.l10n.every24Hours)),
+                    value: 360,
+                    child: Text(context.l10n.every6Hours),
+                  ),
+                  DropdownMenuItem(
+                    value: 720,
+                    child: Text(context.l10n.every12Hours),
+                  ),
+                  DropdownMenuItem(
+                    value: 1440,
+                    child: Text(context.l10n.every24Hours),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) {
@@ -1044,14 +1097,17 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                   FilledButton(
                     onPressed: () async {
                       if (nameCtl.text.trim().isEmpty ||
-                          taskCtl.text.trim().isEmpty) return;
+                          taskCtl.text.trim().isEmpty) {
+                        return;
+                      }
                       final cronService = ref.read(cronServiceProvider);
-                      await cronService.addJob(CronJob(
-                        name: nameCtl.text.trim(),
-                        task: taskCtl.text.trim(),
-                        interval:
-                            Duration(minutes: intervalMinutes),
-                      ));
+                      await cronService.addJob(
+                        CronJob(
+                          name: nameCtl.text.trim(),
+                          task: taskCtl.text.trim(),
+                          interval: Duration(minutes: intervalMinutes),
+                        ),
+                      );
                       if (ctx.mounted) Navigator.pop(ctx);
                       setState(() {});
                     },
@@ -1107,10 +1163,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               maxLines: null,
               expands: true,
               textAlignVertical: TextAlignVertical.top,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-              ),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.all(12),
@@ -1124,8 +1177,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   String _previewText(String content) {
     final lines = content.trim().split('\n');
-    final nonEmpty =
-        lines.where((l) => l.trim().isNotEmpty && !l.startsWith('#')).toList();
+    final nonEmpty = lines
+        .where((l) => l.trim().isNotEmpty && !l.startsWith('#'))
+        .toList();
     if (nonEmpty.isEmpty) return '(empty)';
     final preview = nonEmpty.take(2).join(' ').trim();
     return preview.length > 80 ? '${preview.substring(0, 80)}...' : preview;
@@ -1171,10 +1225,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     width: 56,
                     height: 56,
                     decoration: BoxDecoration(
-                      color: Theme.of(ctx)
-                          .colorScheme
-                          .primaryContainer
-                          .withValues(alpha: 0.3),
+                      color: Theme.of(
+                        ctx,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
@@ -1192,18 +1245,15 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                         Text(
                           skill.name,
                           style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         if (skill.author != null)
                           Text(
                             'by @${skill.author}',
-                            style:
-                                Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(ctx)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
+                            style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                            ),
                           ),
                       ],
                     ),
@@ -1211,7 +1261,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              if (skill.downloads > 0 || skill.stars > 0 || skill.version != null)
+              if (skill.downloads > 0 ||
+                  skill.stars > 0 ||
+                  skill.version != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Row(
@@ -1224,10 +1276,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       if (skill.downloads > 0 && skill.stars > 0)
                         const SizedBox(width: 8),
                       if (skill.stars > 0)
-                        _StatChip(
-                          icon: Icons.star,
-                          label: '${skill.stars}',
-                        ),
+                        _StatChip(icon: Icons.star, label: '${skill.stars}'),
                       if (skill.version != null) ...[
                         const SizedBox(width: 8),
                         _StatChip(
@@ -1247,8 +1296,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       Text(
                         'Description',
                         style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -1269,19 +1318,27 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     final service = ref.read(skillsServiceProvider);
 
                     // Download content first for compatibility check
-                    final content = await service.downloadSkillContent(skill.name);
+                    final content = await service.downloadSkillContent(
+                      skill.name,
+                    );
                     if (content == null) {
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(context.l10n.failedToInstallSkill(skill.name))),
+                          SnackBar(
+                            content: Text(
+                              context.l10n.failedToInstallSkill(skill.name),
+                            ),
+                          ),
                         );
                       }
                       return;
                     }
 
                     // Check compatibility with mobile
-                    final compat = await service.checkSkillCompatibility(content);
+                    final compat = await service.checkSkillCompatibility(
+                      content,
+                    );
 
                     if (!ctx.mounted) return;
 
@@ -1289,7 +1346,11 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       showDialog(
                         context: ctx,
                         builder: (dCtx) => AlertDialog(
-                          icon: const Icon(Icons.block, color: Colors.red, size: 32),
+                          icon: const Icon(
+                            Icons.block,
+                            color: Colors.red,
+                            size: 32,
+                          ),
                           title: Text(context.l10n.incompatibleSkill),
                           content: Text(
                             context.l10n.incompatibleSkillDesc(compat.reason),
@@ -1309,10 +1370,16 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       final userChoice = await showDialog<String>(
                         context: ctx,
                         builder: (dCtx) => AlertDialog(
-                          icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 32),
+                          icon: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.orange,
+                            size: 32,
+                          ),
                           title: Text(context.l10n.compatibilityWarning),
                           content: Text(
-                            context.l10n.compatibilityWarningDesc(compat.reason),
+                            context.l10n.compatibilityWarningDesc(
+                              compat.reason,
+                            ),
                           ),
                           actions: [
                             TextButton(
@@ -1336,21 +1403,30 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       if (userChoice == null || userChoice == 'cancel') return;
 
                       bool ok;
-                      if (userChoice == 'adapt' && compat.adaptedContent != null) {
+                      if (userChoice == 'adapt' &&
+                          compat.adaptedContent != null) {
                         ok = await service.installSkillFromContent(
-                            skill.name, compat.adaptedContent!);
+                          skill.name,
+                          compat.adaptedContent!,
+                        );
                       } else {
                         ok = await service.installSkillFromContent(
-                            skill.name, content);
+                          skill.name,
+                          content,
+                        );
                       }
 
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(ok
-                                ? context.l10n.installedSkill(skill.name)
-                                : context.l10n.failedToInstallSkill(skill.name)),
+                            content: Text(
+                              ok
+                                  ? context.l10n.installedSkill(skill.name)
+                                  : context.l10n.failedToInstallSkill(
+                                      skill.name,
+                                    ),
+                            ),
                           ),
                         );
                         if (ok) setState(() {});
@@ -1360,14 +1436,18 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
                     // Compatible — install directly
                     final ok = await service.installSkillFromContent(
-                        skill.name, content);
+                      skill.name,
+                      content,
+                    );
                     if (ctx.mounted) {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(ok
-                              ? context.l10n.installedSkill(skill.name)
-                              : context.l10n.failedToInstallSkill(skill.name)),
+                          content: Text(
+                            ok
+                                ? context.l10n.installedSkill(skill.name)
+                                : context.l10n.failedToInstallSkill(skill.name),
+                          ),
                         ),
                       );
                       if (ok) setState(() {});
@@ -1389,10 +1469,7 @@ class _StatChip extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _StatChip({
-    required this.icon,
-    required this.label,
-  });
+  const _StatChip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -1405,13 +1482,17 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 14,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 4),
           Text(
             label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -1434,11 +1515,11 @@ class _SectionTitle extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const Spacer(),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

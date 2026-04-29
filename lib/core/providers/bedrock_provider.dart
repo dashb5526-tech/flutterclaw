@@ -16,6 +16,7 @@ import 'package:logging/logging.dart';
 import 'anthropic_provider.dart';
 import 'openai_provider.dart';
 import 'provider_interface.dart';
+import '../agent/cancel_token.dart';
 
 final _log = Logger('flutterclaw.bedrock');
 
@@ -36,7 +37,10 @@ class BedrockProvider implements LlmProvider {
   String get defaultApiBase => '';
 
   @override
-  Future<LlmResponse> chatCompletion(LlmRequest request) async {
+  Future<LlmResponse> chatCompletion(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  }) async {
     final region = request.awsRegion ?? _extractRegion(request.apiBase);
     final modelId = request.model;
     final host = 'bedrock-runtime.$region.amazonaws.com';
@@ -50,6 +54,9 @@ class BedrockProvider implements LlmProvider {
     _log.info('chatCompletion: POST $url | model=${request.model} '
         'authMode=${request.awsAuthMode ?? "sigv4"} region=$region');
 
+    final dioCancelToken = CancelToken();
+    cancelToken?.addListener(() => dioCancelToken.cancel());
+
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         url,
@@ -60,6 +67,7 @@ class BedrockProvider implements LlmProvider {
           receiveTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
           sendTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
         ),
+        cancelToken: dioCancelToken,
       );
 
       return _anthropic.parseNonStreamResponse(response.data!);
@@ -71,7 +79,10 @@ class BedrockProvider implements LlmProvider {
   }
 
   @override
-  Stream<LlmStreamEvent> chatCompletionStream(LlmRequest request) async* {
+  Stream<LlmStreamEvent> chatCompletionStream(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  }) async* {
     final region = request.awsRegion ?? _extractRegion(request.apiBase);
     final modelId = request.model;
     final host = 'bedrock-runtime.$region.amazonaws.com';
@@ -85,6 +96,9 @@ class BedrockProvider implements LlmProvider {
     _log.info('chatCompletionStream: POST $url | model=${request.model} '
         'authMode=${request.awsAuthMode ?? "sigv4"} region=$region');
 
+    final dioCancelToken = CancelToken();
+    cancelToken?.addListener(() => dioCancelToken.cancel());
+
     Response<ResponseBody> response;
     try {
       response = await _dio.post<ResponseBody>(
@@ -96,8 +110,10 @@ class BedrockProvider implements LlmProvider {
           receiveTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
           sendTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
         ),
+        cancelToken: dioCancelToken,
       );
     } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) return;
       // For stream responses, read the body to get the error message.
       String? errorBody;
       if (e.response?.data is ResponseBody) {

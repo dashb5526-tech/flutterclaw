@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
 import 'provider_interface.dart';
+import '../agent/cancel_token.dart';
 
 final _log = Logger('OpenAiProvider');
 
@@ -27,10 +28,16 @@ class OpenAiProvider implements LlmProvider {
   String get defaultApiBase => 'https://api.openai.com/v1';
 
   @override
-  Future<LlmResponse> chatCompletion(LlmRequest request) async {
+  Future<LlmResponse> chatCompletion(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  }) async {
     final url = _buildUrl(request.apiBase);
     final body = _buildBody(request, stream: false);
     _logChatRequest(operation: 'chatCompletion', url: url, apiBase: request.apiBase, body: body);
+
+    final dioCancelToken = CancelToken();
+    cancelToken?.addListener(() => dioCancelToken.cancel());
 
     try {
       final response = await _dio.post<Map<String, dynamic>>(
@@ -42,6 +49,7 @@ class OpenAiProvider implements LlmProvider {
           receiveTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
           sendTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
         ),
+        cancelToken: dioCancelToken,
       );
 
       return _parseNonStreamResponse(response.data!);
@@ -51,10 +59,16 @@ class OpenAiProvider implements LlmProvider {
   }
 
   @override
-  Stream<LlmStreamEvent> chatCompletionStream(LlmRequest request) async* {
+  Stream<LlmStreamEvent> chatCompletionStream(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  }) async* {
     final url = _buildUrl(request.apiBase);
     final body = _buildBody(request, stream: true);
     _logChatRequest(operation: 'chatCompletionStream', url: url, apiBase: request.apiBase, body: body);
+
+    final dioCancelToken = CancelToken();
+    cancelToken?.addListener(() => dioCancelToken.cancel());
 
     Response<ResponseBody> response;
     try {
@@ -67,8 +81,10 @@ class OpenAiProvider implements LlmProvider {
           receiveTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
           sendTimeout: Duration(seconds: request.timeoutSeconds ?? 120),
         ),
+        cancelToken: dioCancelToken,
       );
     } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) return;
       throw await _handleDioError(e);
     }
 

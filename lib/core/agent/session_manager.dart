@@ -273,8 +273,10 @@ class SessionManager {
     String chatId,
   ) async {
     if (_meta.containsKey(key)) {
-      _meta[key]!.lastActivity = DateTime.now();
-      return _meta[key]!;
+      final meta = _meta[key]!;
+      meta.lastActivity = DateTime.now();
+      await ensureLoaded(key);
+      return meta;
     }
 
     final dir = await _getSessionsDir();
@@ -315,6 +317,7 @@ class SessionManager {
 
   /// Append a message to the session transcript (JSONL).
   Future<void> addMessage(String key, LlmMessage message) async {
+    await ensureLoaded(key);
     final meta = _meta[key];
     if (meta == null) return;
 
@@ -331,6 +334,7 @@ class SessionManager {
         if (message.toolCalls != null)
           'toolCalls': message.toolCalls!.map((e) => e.toJson()).toList(),
         if (message.toolCallId != null) 'toolCallId': message.toolCallId,
+        if (message.usage != null) 'usage': message.usage!.toJson(),
       },
     );
 
@@ -686,11 +690,6 @@ class SessionManager {
     final dir = await _getSessionsDir();
     await Directory(dir).create(recursive: true);
     await _loadStoreIfNeeded(dir);
-
-    // Load context caches for all known sessions
-    for (final meta in _meta.values) {
-      await _rebuildContextCache(meta.key);
-    }
   }
 
   /// Persist all metadata.
@@ -875,6 +874,13 @@ class SessionManager {
     return entries;
   }
 
+  /// Ensure that a session's transcript is loaded into the in-memory context cache.
+  Future<void> ensureLoaded(String key) async {
+    if (!_contextCache.containsKey(key)) {
+      await _rebuildContextCache(key);
+    }
+  }
+
   Future<void> _rebuildContextCache(String key) async {
     final meta = _meta[key];
     if (meta == null) return;
@@ -931,12 +937,18 @@ class SessionManager {
             .toList();
       }
 
+      UsageInfo? usage;
+      if (e.data['usage'] != null) {
+        usage = UsageInfo.fromJson(e.data['usage'] as Map<String, dynamic>);
+      }
+
       messages.add(LlmMessage(
         role: role,
         content: content,
         name: name,
         toolCalls: toolCalls,
         toolCallId: toolCallId,
+        usage: usage,
       ));
     }
 

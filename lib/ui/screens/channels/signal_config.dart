@@ -1,13 +1,13 @@
 // ignore_for_file: unused_import
 import "package:flutter/material.dart";
 import "package:flutterclaw/ui/theme/tokens.dart";
-import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutterclaw/channels/signal.dart";
 import "package:flutterclaw/core/app_providers.dart";
 import "package:flutterclaw/l10n/l10n_extension.dart";
 import "package:flutterclaw/services/pairing_service.dart";
 import "package:flutterclaw/data/models/config.dart";
+
 class SignalConfigScreen extends ConsumerStatefulWidget {
   const SignalConfigScreen({super.key});
   @override
@@ -23,7 +23,7 @@ class _SignalConfigScreenState extends ConsumerState<SignalConfigScreen> {
   void initState() {
     super.initState();
     final signal = ref.read(configManagerProvider).config.channels.signal;
-    _apiUrlCtrl  = TextEditingController(text: signal.apiUrl ?? '');
+    _apiUrlCtrl = TextEditingController(text: signal.apiUrl ?? '');
     _accountCtrl = TextEditingController(text: signal.account ?? '');
   }
 
@@ -35,42 +35,45 @@ class _SignalConfigScreenState extends ConsumerState<SignalConfigScreen> {
   }
 
   Future<void> _save() async {
-    final apiUrl  = _apiUrlCtrl.text.trim();
+    final apiUrl = _apiUrlCtrl.text.trim();
     final account = _accountCtrl.text.trim();
     if (apiUrl.isEmpty || account.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.apiUrlPhoneRequired)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.apiUrlPhoneRequired)));
       return;
     }
     setState(() => _saving = true);
     try {
       final configManager = ref.read(configManagerProvider);
       final config = configManager.config;
-      configManager.update(config.copyWith(
-        channels: ChannelsConfig(
-          telegram: config.channels.telegram,
-          discord:  config.channels.discord,
-          whatsapp: config.channels.whatsapp,
-          slack:    config.channels.slack,
-          signal: SignalConfig(
-            enabled:   true,
-            apiUrl:    apiUrl,
-            account:   account,
-            allowFrom: config.channels.signal.allowFrom,
+      configManager.update(
+        config.copyWith(
+          channels: ChannelsConfig(
+            telegram: config.channels.telegram,
+            discord: config.channels.discord,
+            whatsapp: config.channels.whatsapp,
+            slack: config.channels.slack,
+            signal: SignalConfig(
+              enabled: true,
+              apiUrl: apiUrl,
+              account: account,
+              allowFrom: config.channels.signal.allowFrom,
+            ),
           ),
         ),
-      ));
+      );
       await configManager.save();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.signalConfigSaved)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.signalConfigSaved)));
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(context.l10n.errorGeneric(e.toString()))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.errorGeneric(e.toString()))),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -90,7 +93,10 @@ class _SignalConfigScreenState extends ConsumerState<SignalConfigScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.l10n.requirementsTitle, style: theme.textTheme.titleMedium),
+                  Text(
+                    context.l10n.requirementsTitle,
+                    style: theme.textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     context.l10n.signalRequirements,
@@ -129,7 +135,8 @@ class _SignalConfigScreenState extends ConsumerState<SignalConfigScreen> {
             onPressed: _saving ? null : _save,
             icon: _saving
                 ? const SizedBox(
-                    width: 18, height: 18,
+                    width: 18,
+                    height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.check),

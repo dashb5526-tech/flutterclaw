@@ -2,7 +2,6 @@
 import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutterclaw/ui/theme/tokens.dart";
-import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutterclaw/channels/whatsapp.dart";
 import "package:flutterclaw/channels/channel_interface.dart";
@@ -12,6 +11,7 @@ import "package:flutterclaw/services/pairing_service.dart";
 import "package:flutterclaw/data/models/config.dart";
 import "package:flutterclaw/ui/widgets/security_method_card.dart";
 import "package:flutterclaw/ui/widgets/whatsapp_pairing_status_card.dart";
+
 class WhatsAppConfigScreen extends ConsumerStatefulWidget {
   const WhatsAppConfigScreen({super.key});
   @override
@@ -304,9 +304,9 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
       _requiresRelink = false;
     });
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.l10n.whatsAppDisconnected)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.whatsAppDisconnected)),
+      );
       Navigator.pop(context);
     }
   }
@@ -510,7 +510,11 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
                           builder: (ctx) => AlertDialog(
                             title: Text(context.l10n.removeDevice),
                             content: Text(
-                              context.l10n.removeAccessFor(entry.value.isNotEmpty ? entry.value : entry.key),
+                              context.l10n.removeAccessFor(
+                                entry.value.isNotEmpty
+                                    ? entry.value
+                                    : entry.key,
+                              ),
                             ),
                             actions: [
                               TextButton(
@@ -574,4 +578,3 @@ class _WhatsAppConfigScreenState extends ConsumerState<WhatsAppConfigScreen> {
 // ---------------------------------------------------------------------------
 // Slack Configuration Screen
 // ---------------------------------------------------------------------------
-

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutterclaw/ui/theme/tokens.dart';
 import 'package:flutter/services.dart';
@@ -931,7 +932,7 @@ class _ProvidersModelsScreenState extends ConsumerState<ProvidersModelsScreen> {
     }
 
     if (startNewSessions) {
-      ref.read(chatProvider.notifier).clear();
+      unawaited(ref.read(chatProvider.notifier).clear());
     }
 
     setState(() {});
@@ -1716,7 +1717,7 @@ class _AddModelScreenState extends ConsumerState<_AddModelScreen> {
         await configManager.save();
       }
       if (result.startNewSessions && mounted) {
-        ref.read(chatProvider.notifier).clear();
+        unawaited(ref.read(chatProvider.notifier).clear());
       }
     }
 

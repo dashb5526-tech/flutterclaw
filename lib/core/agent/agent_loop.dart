@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:flutterclaw/channels/whatsapp.dart';
 import 'package:flutterclaw/core/agent/link_understanding.dart';
 import 'package:flutterclaw/core/agent/provider_router.dart';
+import 'package:flutterclaw/core/agent/cancel_token.dart';
 import 'package:flutterclaw/services/battery_service.dart';
 import 'package:flutterclaw/services/connectivity_service.dart';
 import 'package:flutterclaw/core/agent/session_manager.dart';
@@ -37,6 +38,7 @@ class AgentResponse {
   final String? errorTitle;
   final String? errorCtaUrl;
   final String? errorCtaLabel;
+
   /// The model name actually used (may differ from config when battery-aware
   /// switching or offline fallback kicks in).
   final String? modelUsed;
@@ -61,9 +63,11 @@ class AgentStreamEvent {
   final String? toolName;
   final Map<String, dynamic>? toolArgs;
   final String? toolResult;
+
   /// Structured details from the tool result (e.g. interactive reply payload).
   /// Consumers like ChatNotifier use this to render rich UI beyond plain text.
   final Map<String, dynamic>? toolDetails;
+
   /// Incremental output chunk from a streaming tool (e.g. sandbox_exec).
   /// The UI appends this to the expandable tool result card in real time.
   final String? toolResultChunk;
@@ -85,11 +89,8 @@ class AgentStreamEvent {
 /// Callback invoked by [AgentLoop] when a tool starts or finishes.
 /// [toolName] is the tool being called, [args] are its arguments.
 /// [isDone] is true when the tool has finished executing.
-typedef ToolStatusCallback = void Function(
-  String toolName,
-  Map<String, dynamic>? args, {
-  bool isDone,
-});
+typedef ToolStatusCallback =
+    void Function(String toolName, Map<String, dynamic>? args, {bool isDone});
 
 class AgentLoop {
   final ConfigManager configManager;
@@ -141,7 +142,8 @@ class AgentLoop {
       }
     }
     final d = _deviceInfo!;
-    final manufacturer = (d['manufacturer'] as String? ?? 'unknown').toLowerCase();
+    final manufacturer = (d['manufacturer'] as String? ?? 'unknown')
+        .toLowerCase();
     final brand = (d['brand'] as String? ?? '').toLowerCase();
     final model = d['model'] as String? ?? 'unknown';
     final androidVer = d['androidVersion'] as String? ?? 'unknown';
@@ -155,93 +157,185 @@ class AgentLoop {
     buf.writeln('# Android UI Automation');
     buf.writeln();
     buf.writeln('## Device');
-    buf.writeln('You are controlling a **$model** by **${d['manufacturer']}** (brand: ${d['brand']}).');
+    buf.writeln(
+      'You are controlling a **$model** by **${d['manufacturer']}** (brand: ${d['brand']}).',
+    );
     buf.writeln('- Android $androidVer (API $sdkInt)');
-    buf.writeln('- Screen: ${screenW}x${screenH} px');
+    buf.writeln('- Screen: ${screenW}x$screenH px');
     buf.writeln('- **Device language: $deviceLang ($deviceLocale)**');
     buf.writeln();
-    buf.writeln('You are the user\'s personal Android expert. You have used this exact $model '
-        'every single day for years. You know every screen, every menu, every shortcut, '
-        'every gesture, and every quirk of ${d['manufacturer']}\'s software. You navigate '
-        'this phone faster than any human could. You NEVER get lost, you NEVER hesitate, '
-        'and you ALWAYS know the fastest path to any setting, app, or feature.');
+    buf.writeln(
+      'You are the user\'s personal Android expert. You have used this exact $model '
+      'every single day for years. You know every screen, every menu, every shortcut, '
+      'every gesture, and every quirk of ${d['manufacturer']}\'s software. You navigate '
+      'this phone faster than any human could. You NEVER get lost, you NEVER hesitate, '
+      'and you ALWAYS know the fastest path to any setting, app, or feature.',
+    );
     buf.writeln();
-    buf.writeln('You have tools to control the device screen (tap, swipe, type, find/click elements, screenshot, global actions).');
+    buf.writeln(
+      'You have tools to control the device screen (tap, swipe, type, find/click elements, screenshot, global actions).',
+    );
     buf.writeln();
     buf.writeln('## ABSOLUTE RULES');
-    buf.writeln('1. **USE THE DEVICE LANGUAGE for all UI element searches.** This phone is set to **$deviceLang**. '
-        'All buttons, menus, labels, and system UI are in $deviceLang. When searching for elements with '
-        '`ui_click_element` or `ui_find_elements`, ALWAYS use $deviceLang text. Examples: '
-        '${_getLocalizedExamples(d['language'] as String? ?? 'en')}');
-    buf.writeln('2. **NEVER ask the user if you should continue.** If you haven\'t reached the objective, KEEP GOING. '
-        'The user asked you to do something — do it completely, start to finish, without stopping to ask for permission or confirmation.');
-    buf.writeln('3. **NEVER say "I couldn\'t find X" or "would you like me to try..." or "shall I continue?"** — '
-        'just try another approach silently and keep working.');
-    buf.writeln('4. **NEVER give up.** If one path doesn\'t work, try another. Scroll, go back, try a different menu. '
-        'You are an expert — experts find solutions, they don\'t report failure.');
-    buf.writeln('5. **Only talk to the user when the task is DONE** or when you need information you truly cannot infer '
-        '(e.g., a password, a specific contact name, a choice between options). Navigation decisions are YOURS to make.');
+    buf.writeln(
+      '1. **USE THE DEVICE LANGUAGE for all UI element searches.** This phone is set to **$deviceLang**. '
+      'All buttons, menus, labels, and system UI are in $deviceLang. When searching for elements with '
+      '`ui_click_element` or `ui_find_elements`, ALWAYS use $deviceLang text. Examples: '
+      '${_getLocalizedExamples(d['language'] as String? ?? 'en')}',
+    );
+    buf.writeln(
+      '2. **NEVER ask the user if you should continue.** If you haven\'t reached the objective, KEEP GOING. '
+      'The user asked you to do something — do it completely, start to finish, without stopping to ask for permission or confirmation.',
+    );
+    buf.writeln(
+      '3. **NEVER say "I couldn\'t find X" or "would you like me to try..." or "shall I continue?"** — '
+      'just try another approach silently and keep working.',
+    );
+    buf.writeln(
+      '4. **NEVER give up.** If one path doesn\'t work, try another. Scroll, go back, try a different menu. '
+      'You are an expert — experts find solutions, they don\'t report failure.',
+    );
+    buf.writeln(
+      '5. **Only talk to the user when the task is DONE** or when you need information you truly cannot infer '
+      '(e.g., a password, a specific contact name, a choice between options). Navigation decisions are YOURS to make.',
+    );
     buf.writeln();
 
     // Manufacturer-specific launcher / UI guidance
     buf.writeln('## Launcher & UI Skin');
     if (manufacturer.contains('samsung') || brand.contains('samsung')) {
       buf.writeln('This is a **Samsung** device running **One UI**.');
-      buf.writeln('- Home screen: swipe up from bottom for App Drawer (all apps).');
-      buf.writeln('- Settings: gear icon in App Drawer or pull down notification shade → tap gear icon (top right).');
-      buf.writeln('- Quick Settings: swipe down once for notifications, twice for full Quick Settings tiles.');
-      buf.writeln('- Recent apps: swipe up and hold from the bottom (gesture nav) or tap the square button.');
-      buf.writeln('- Samsung apps folder: common apps grouped in a "Samsung" folder on home screen or app drawer.');
-      buf.writeln('- Edge Panel: swipe inward from the right edge for Edge Panel shortcuts.');
-      buf.writeln('- Settings search: has a search bar at the very top of Settings.');
-    } else if (manufacturer.contains('google') || brand.contains('google') || model.toLowerCase().contains('pixel')) {
-      buf.writeln('This is a **Google Pixel** running **stock Android / Pixel Launcher**.');
-      buf.writeln('- Home screen: swipe up for App Drawer. Google search bar at bottom.');
-      buf.writeln('- Settings: App Drawer → "Settings", or swipe down twice → gear icon.');
-      buf.writeln('- Quick Settings: swipe down once for compact, twice for expanded tiles.');
+      buf.writeln(
+        '- Home screen: swipe up from bottom for App Drawer (all apps).',
+      );
+      buf.writeln(
+        '- Settings: gear icon in App Drawer or pull down notification shade → tap gear icon (top right).',
+      );
+      buf.writeln(
+        '- Quick Settings: swipe down once for notifications, twice for full Quick Settings tiles.',
+      );
+      buf.writeln(
+        '- Recent apps: swipe up and hold from the bottom (gesture nav) or tap the square button.',
+      );
+      buf.writeln(
+        '- Samsung apps folder: common apps grouped in a "Samsung" folder on home screen or app drawer.',
+      );
+      buf.writeln(
+        '- Edge Panel: swipe inward from the right edge for Edge Panel shortcuts.',
+      );
+      buf.writeln(
+        '- Settings search: has a search bar at the very top of Settings.',
+      );
+    } else if (manufacturer.contains('google') ||
+        brand.contains('google') ||
+        model.toLowerCase().contains('pixel')) {
+      buf.writeln(
+        'This is a **Google Pixel** running **stock Android / Pixel Launcher**.',
+      );
+      buf.writeln(
+        '- Home screen: swipe up for App Drawer. Google search bar at bottom.',
+      );
+      buf.writeln(
+        '- Settings: App Drawer → "Settings", or swipe down twice → gear icon.',
+      );
+      buf.writeln(
+        '- Quick Settings: swipe down once for compact, twice for expanded tiles.',
+      );
       buf.writeln('- Recent apps: swipe up and hold from bottom edge.');
-      buf.writeln('- At a Glance widget at top of home screen shows date/weather.');
-      buf.writeln('- Pixel-specific features: Now Playing, Live Caption, Call Screen accessible in Settings.');
-    } else if (manufacturer.contains('xiaomi') || brand.contains('redmi') || brand.contains('poco') || brand.contains('xiaomi')) {
-      buf.writeln('This is a **Xiaomi/Redmi/POCO** device running **MIUI / HyperOS**.');
-      buf.writeln('- Home screen: by default NO app drawer — all apps are on the home screen pages. Swipe left/right to find apps.');
-      buf.writeln('- To enable App Drawer (if enabled): swipe up from bottom center.');
-      buf.writeln('- Settings: look for "Settings" gear icon on home screen, or pull down notification shade → gear icon.');
-      buf.writeln('- Control Center: swipe down from top-right for Control Center, top-left for notifications (MIUI 13+).');
-      buf.writeln('- Security app: contains cleaner, battery, permissions — important hub.');
+      buf.writeln(
+        '- At a Glance widget at top of home screen shows date/weather.',
+      );
+      buf.writeln(
+        '- Pixel-specific features: Now Playing, Live Caption, Call Screen accessible in Settings.',
+      );
+    } else if (manufacturer.contains('xiaomi') ||
+        brand.contains('redmi') ||
+        brand.contains('poco') ||
+        brand.contains('xiaomi')) {
+      buf.writeln(
+        'This is a **Xiaomi/Redmi/POCO** device running **MIUI / HyperOS**.',
+      );
+      buf.writeln(
+        '- Home screen: by default NO app drawer — all apps are on the home screen pages. Swipe left/right to find apps.',
+      );
+      buf.writeln(
+        '- To enable App Drawer (if enabled): swipe up from bottom center.',
+      );
+      buf.writeln(
+        '- Settings: look for "Settings" gear icon on home screen, or pull down notification shade → gear icon.',
+      );
+      buf.writeln(
+        '- Control Center: swipe down from top-right for Control Center, top-left for notifications (MIUI 13+).',
+      );
+      buf.writeln(
+        '- Security app: contains cleaner, battery, permissions — important hub.',
+      );
     } else if (manufacturer.contains('huawei') || brand.contains('honor')) {
-      buf.writeln('This is a **Huawei/Honor** device running **EMUI / HarmonyOS**.');
-      buf.writeln('- Home screen: swipe up for App Drawer (if enabled), otherwise apps on pages.');
-      buf.writeln('- Settings: gear icon on home screen or swipe down → gear icon.');
-      buf.writeln('- Quick Settings: swipe down from top, swipe again for full tiles.');
-      buf.writeln('- AppGallery instead of Play Store for Huawei-exclusive apps.');
+      buf.writeln(
+        'This is a **Huawei/Honor** device running **EMUI / HarmonyOS**.',
+      );
+      buf.writeln(
+        '- Home screen: swipe up for App Drawer (if enabled), otherwise apps on pages.',
+      );
+      buf.writeln(
+        '- Settings: gear icon on home screen or swipe down → gear icon.',
+      );
+      buf.writeln(
+        '- Quick Settings: swipe down from top, swipe again for full tiles.',
+      );
+      buf.writeln(
+        '- AppGallery instead of Play Store for Huawei-exclusive apps.',
+      );
     } else if (manufacturer.contains('oneplus') || brand.contains('oneplus')) {
       buf.writeln('This is a **OnePlus** device running **OxygenOS**.');
       buf.writeln('- Very close to stock Android with App Drawer on swipe up.');
       buf.writeln('- Settings: App Drawer → "Settings", or swipe down → gear.');
       buf.writeln('- Shelf: swipe down on home screen (sometimes left).');
-      buf.writeln('- Alert Slider: physical switch for Ring/Vibrate/Silent — not controllable via UI.');
-    } else if (manufacturer.contains('oppo') || brand.contains('realme') || manufacturer.contains('vivo')) {
-      buf.writeln('This is an **OPPO/Realme/vivo** device running **ColorOS / Funtouch OS**.');
-      buf.writeln('- Home screen: may or may not have app drawer (check by swiping up).');
-      buf.writeln('- Settings: gear icon on home screen or notification shade.');
-      buf.writeln('- Control Center may be separate from notifications (like MIUI).');
+      buf.writeln(
+        '- Alert Slider: physical switch for Ring/Vibrate/Silent — not controllable via UI.',
+      );
+    } else if (manufacturer.contains('oppo') ||
+        brand.contains('realme') ||
+        manufacturer.contains('vivo')) {
+      buf.writeln(
+        'This is an **OPPO/Realme/vivo** device running **ColorOS / Funtouch OS**.',
+      );
+      buf.writeln(
+        '- Home screen: may or may not have app drawer (check by swiping up).',
+      );
+      buf.writeln(
+        '- Settings: gear icon on home screen or notification shade.',
+      );
+      buf.writeln(
+        '- Control Center may be separate from notifications (like MIUI).',
+      );
     } else {
-      buf.writeln('Manufacturer: ${d['manufacturer']}. Assume near-stock Android launcher with App Drawer on swipe up.');
+      buf.writeln(
+        'Manufacturer: ${d['manufacturer']}. Assume near-stock Android launcher with App Drawer on swipe up.',
+      );
     }
     buf.writeln();
 
     // Gesture navigation awareness
     buf.writeln('## Navigation');
-    if (sdkInt >= 29) { // Android 10+
-      buf.writeln('Android ${androidVer} likely uses **gesture navigation** (no visible nav buttons):');
+    if (sdkInt >= 29) {
+      // Android 10+
+      buf.writeln(
+        'Android $androidVer likely uses **gesture navigation** (no visible nav buttons):',
+      );
       buf.writeln('- Back: swipe from left or right edge toward center.');
       buf.writeln('- Home: swipe up from bottom edge.');
       buf.writeln('- Recents: swipe up from bottom and hold.');
-      buf.writeln('- BUT use `ui_global_action` for these — it works regardless of nav mode.');
+      buf.writeln(
+        '- BUT use `ui_global_action` for these — it works regardless of nav mode.',
+      );
     } else {
-      buf.writeln('Likely uses **3-button navigation**: Back (triangle), Home (circle), Recents (square).');
-      buf.writeln('Use `ui_global_action` for back/home/recents — it always works.');
+      buf.writeln(
+        'Likely uses **3-button navigation**: Back (triangle), Home (circle), Recents (square).',
+      );
+      buf.writeln(
+        'Use `ui_global_action` for back/home/recents — it always works.',
+      );
     }
     buf.writeln();
 
@@ -398,6 +492,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     List<Map<String, dynamic>>? contentBlocks,
     Map<String, dynamic>? channelContext,
     Future<void> Function(String text)? onIntermediateMessage,
+    String? userLanguage,
+    CancellationToken? cancelToken,
   }) async {
     await hookRunner?.runLifecycle(HookEvent.sessionStart, sessionKey);
     await sessionManager.getOrCreate(sessionKey, channelType, chatId);
@@ -463,7 +559,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     if (modelEntry.isLiveOnly) {
       _log.info('Model "$modelName" is a Live API model — skipping REST call');
       return AgentResponse(
-        content: 'Este modelo usa la API en tiempo real. '
+        content:
+            'Este modelo usa la API en tiempo real. '
             'Toca el botón de voz para iniciar una conversación en vivo.',
         sessionKey: sessionKey,
       );
@@ -471,8 +568,10 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
 
     // Pre-request token validation: check if context approaching limit
     final totalTokens = _estimateContextTokens(context, systemPrompt);
-    final contextWindow =
-        TokenBudgetManager.getContextWindow(modelName, configManager);
+    final contextWindow = TokenBudgetManager.getContextWindow(
+      modelName,
+      configManager,
+    );
     final safeLimit = TokenBudgetManager.getSafeContextLimit(
       modelName,
       configManager,
@@ -531,7 +630,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     var loopMessages = List<LlmMessage>.from(messages);
     var continuationRound = 0;
     const maxContinuations = 2; // up to 3 rounds × maxToolIterations total
-    final provCred = configManager.config.providerCredentials[modelEntry.provider];
+    final provCred =
+        configManager.config.providerCredentials[modelEntry.provider];
 
     // Resolve thinking/effort settings: keyword detection → session level → model default.
     final sessionMeta = sessionManager.getMeta(sessionKey);
@@ -548,10 +648,14 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         .where((m) => m.id == modelEntry.model)
         .firstOrNull;
 
-    continuation: while (true) {
+    continuation:
+    while (true) {
       var maxIter = maxToolIterations;
 
       while (maxIter-- > 0) {
+        if (cancelToken?.isCancelled == true) {
+          return const AgentResponse(content: 'Cancelled', sessionKey: '');
+        }
         final request = LlmRequest(
           model: modelEntry.model,
           apiKey: configManager.config.resolveApiKey(modelEntry),
@@ -582,7 +686,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
               content: parsed.friendlyMessage,
               metadata: {
                 'error': true,
-                if (parsed.statusCode != null) 'errorStatusCode': parsed.statusCode,
+                if (parsed.statusCode != null)
+                  'errorStatusCode': parsed.statusCode,
                 if (parsed.errorTitle != null) 'errorTitle': parsed.errorTitle,
                 if (parsed.ctaUrl != null) 'errorCtaUrl': parsed.ctaUrl,
                 if (parsed.ctaLabel != null) 'errorCtaLabel': parsed.ctaLabel,
@@ -603,15 +708,19 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
 
         if (response.usage != null) {
           totalUsage = _mergeUsage(totalUsage, response.usage!);
-          final costUsd = catalogModel?.computeCostUsd(
+          final costUsd =
+              catalogModel?.computeCostUsd(
                 inputTokens: response.usage!.promptTokens,
                 outputTokens: response.usage!.completionTokens,
                 cacheReadTokens: response.usage!.cacheReadTokens,
                 cacheWriteTokens: response.usage!.cacheWriteTokens,
               ) ??
               0.0;
-          await sessionManager.updateTokens(sessionKey, response.usage!,
-              costUsd: costUsd);
+          await sessionManager.updateTokens(
+            sessionKey,
+            response.usage!,
+            costUsd: costUsd,
+          );
         }
 
         if (response.toolCalls != null && response.toolCalls!.isNotEmpty) {
@@ -637,19 +746,30 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
           }
 
           for (final tc in response.toolCalls!) {
+            if (cancelToken?.isCancelled == true) {
+              return const AgentResponse(content: 'Cancelled', sessionKey: '');
+            }
             try {
               final args = _parseToolArgs(tc.function.arguments);
               // Inject session context so tools that need to reach back to the user
               // (e.g. web_browse request_user_action) know which channel to use.
               args['__session_key'] = sessionKey;
-              _log.info('Tool start: ${tc.function.name} (onToolStatus=${onToolStatus != null})');
+              _log.info(
+                'Tool start: ${tc.function.name} (onToolStatus=${onToolStatus != null})',
+              );
               onToolStatus?.call(tc.function.name, args, isDone: false);
               ToolResult result;
               try {
                 result = await toolRegistry.execute(tc.function.name, args);
               } catch (e, st) {
-                _log.severe('Tool ${tc.function.name} threw unexpectedly', e, st);
-                result = ToolResult.error('Tool "${tc.function.name}" crashed: $e');
+                _log.severe(
+                  'Tool ${tc.function.name} threw unexpectedly',
+                  e,
+                  st,
+                );
+                result = ToolResult.error(
+                  'Tool "${tc.function.name}" crashed: $e',
+                );
               }
               onToolStatus?.call(tc.function.name, args, isDone: true);
               toolCallsExecuted++;
@@ -666,7 +786,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
             } catch (e, st) {
               _log.severe(
                 'Outer tool-call handling failed for ${tc.function.name}',
-                e, st,
+                e,
+                st,
               );
               // Ensure a tool_result is always written to prevent orphaned tool_use.
               final errorMsg = LlmMessage(
@@ -695,7 +816,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
 
         // Auto-title: after the first real user+assistant exchange, generate a
         // short descriptive title for the session so the sessions list is useful.
-        final sessionMeta = sessionManager.listSessions()
+        final sessionMeta = sessionManager
+            .listSessions()
             .where((s) => s.key == sessionKey)
             .firstOrNull;
         if (sessionMeta != null &&
@@ -724,7 +846,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         );
         final contMsg = LlmMessage(
           role: 'user',
-          content: '[Auto-continuing ($continuationRound/$maxContinuations). Resume the task.]',
+          content:
+              '[Auto-continuing ($continuationRound/$maxContinuations). Resume the task.]',
         );
         await sessionManager.addMessage(sessionKey, contMsg);
         loopMessages.add(contMsg);
@@ -739,7 +862,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     if (loopMessages.isNotEmpty && loopMessages.last.role == 'tool') {
       final limitMsg = LlmMessage(
         role: 'user',
-        content: '[Tool call limit reached after $toolCallsExecuted calls total '
+        content:
+            '[Tool call limit reached after $toolCallsExecuted calls total '
             '(${1 + maxContinuations} rounds). Summarize what you accomplished, '
             'what still needs to be done, and tell the user they can ask you to continue.]',
       );
@@ -801,16 +925,18 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     List<Map<String, dynamic>>? contentBlocks,
     String? userLanguage,
     Map<String, dynamic>? channelContext,
+    CancellationToken? cancelToken,
   }) async* {
     await sessionManager.getOrCreate(sessionKey, channelType, chatId);
     final session = sessionManager.getSession(sessionKey);
     // Use the agent that owns this session so its identity/workspace is loaded
     final sessionAgent =
         _resolveSessionAgent(sessionKey) ?? configManager.config.activeAgent;
-    final systemPrompt = await _buildSystemPrompt(
-      userLanguage: userLanguage,
-      agentId: sessionAgent?.id,
-    );
+
+    // Use the session's agent settings, fall back to defaults
+    final defaults = configManager.config.agents.defaults;
+    var modelName =
+        session?.modelOverride ?? sessionAgent?.modelName ?? defaults.modelName;
 
     // Persist user message (only if not empty or has content blocks)
     final userContent = contentBlocks ?? message;
@@ -823,38 +949,71 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       );
     }
 
-    var context = sessionManager.getContextMessages(sessionKey);
-    final messages = <LlmMessage>[];
-    if (systemPrompt.isNotEmpty) {
-      messages.add(LlmMessage(role: 'system', content: systemPrompt));
+    final context = sessionManager.getContextMessages(sessionKey);
+    final maxTurns = defaults.maxContextTurns;
+
+    // Sliding window: limit context messages based on maxContextTurns,
+    // ensuring the compaction summary is always preserved.
+    final List<LlmMessage> activeContext;
+    if (context.isNotEmpty &&
+        context[0].role == 'system' &&
+        context[0].content.toString().startsWith(
+          '[Previous conversation summary]',
+        )) {
+      final summary = context[0];
+      final recent = context.sublist(1);
+      final window = recent.length > maxTurns
+          ? recent.sublist(recent.length - maxTurns)
+          : recent;
+      activeContext = [summary, ...window];
+    } else {
+      activeContext = context.length > maxTurns
+          ? context.sublist(context.length - maxTurns)
+          : context;
     }
+
+    final systemPrompt = await _buildSystemPrompt(
+      userLanguage: userLanguage,
+      agentId: sessionAgent?.id,
+      message: message,
+      context: activeContext,
+    );
+
+    final messages = <LlmMessage>[
+      LlmMessage(role: 'system', content: systemPrompt),
+    ];
     final ephemeralContext = _buildChannelContextPrompt(channelContext);
     if (ephemeralContext != null) {
       messages.add(LlmMessage(role: 'system', content: ephemeralContext));
     }
 
     // Auto-fetch any URLs in the user message and inject as ephemeral context.
-    // Only runs for plain-text messages (not multimodal content blocks).
     if (contentBlocks == null && message.trim().isNotEmpty) {
       final webFetch = toolRegistry.get('web_fetch');
       if (webFetch != null) {
         final linkContext = await runLinkUnderstanding(
           message,
           fetchUrl: (url) async {
-            final result = await webFetch.execute({'url': url, 'max_chars': 2000});
+            final result = await webFetch.execute({
+              'url': url,
+              'max_chars': 2000,
+            });
             return result.isError ? null : result.content;
           },
         );
         if (linkContext != null) {
-          messages.add(LlmMessage(
-            role: 'system',
-            content: '[Link context auto-fetched from message]\n\n$linkContext',
-          ));
+          messages.add(
+            LlmMessage(
+              role: 'system',
+              content:
+                  '[Link context auto-fetched from message]\n\n$linkContext',
+            ),
+          );
         }
       }
     }
 
-    messages.addAll(context);
+    messages.addAll(activeContext);
 
     // Most APIs require at least one user message. When the hatch fires with an
     // empty message and there is no prior context, the list would only contain
@@ -864,10 +1023,6 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       messages.add(const LlmMessage(role: 'user', content: '.'));
     }
 
-    // Use the session's agent settings, fall back to defaults
-    final defaults = configManager.config.agents.defaults;
-    var modelName =
-        session?.modelOverride ?? sessionAgent?.modelName ?? defaults.modelName;
     final temperature = sessionAgent?.temperature ?? defaults.temperature;
     final maxTokens = sessionAgent?.maxTokens ?? defaults.maxTokens;
     final maxToolIterations =
@@ -885,7 +1040,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         // Critically low battery: prefer fastest/cheapest available model
         final lowModel = _findLowestCostModel();
         if (lowModel != null && lowModel != modelName) {
-          _log.info('Battery critical ($level%): switching from $modelName to $lowModel');
+          _log.info(
+            'Battery critical ($level%): switching from $modelName to $lowModel',
+          );
           modelName = lowModel;
         }
       }
@@ -901,7 +1058,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         yield AgentStreamEvent(
           isDone: true,
           finalResponse: AgentResponse(
-            content: 'No internet connection and no local model configured. '
+            content:
+                'No internet connection and no local model configured. '
                 'Connect to the internet or set up Ollama in Settings → Providers.',
             sessionKey: sessionKey,
           ),
@@ -928,7 +1086,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       yield AgentStreamEvent(
         isDone: true,
         finalResponse: AgentResponse(
-          content: 'Este modelo usa la API en tiempo real. '
+          content:
+              'Este modelo usa la API en tiempo real. '
               'Toca el botón de voz para iniciar una conversación en vivo.',
           sessionKey: sessionKey,
         ),
@@ -936,19 +1095,18 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       return;
     }
 
-    // Pre-request token validation: check if context approaching limit
-    final totalTokens = _estimateContextTokens(context, systemPrompt);
-    final contextWindow =
-        TokenBudgetManager.getContextWindow(modelName, configManager);
+    // Pre-request token validation: check if FULL history approaching limit to trigger compaction.
+    final historyTokens = _estimateContextTokens(context, systemPrompt);
+    final limit = TokenBudgetManager.getContextWindow(modelName, configManager);
     final safeLimit = TokenBudgetManager.getSafeContextLimit(
       modelName,
       configManager,
     );
 
-    if (totalTokens > safeLimit) {
+    if (historyTokens > safeLimit) {
       _log.warning(
-        'Context approaching limit: $totalTokens tokens > $safeLimit threshold '
-        '(model: $modelName, limit: $contextWindow)',
+        'History approaching limit: $historyTokens tokens > $safeLimit threshold '
+        '(model: $modelName, limit: $limit)',
       );
 
       // Option A: Auto-compact if enabled and session is eligible
@@ -957,49 +1115,40 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         final compacted = await compactSession(sessionKey);
         if (compacted != null) {
           _log.info('Compaction successful: $compacted');
-          // Reload context after compaction
-          context = sessionManager.getContextMessages(sessionKey);
-          // Rebuild messages list with new context
+          // Reload context after compaction (this will be used as the new active messages)
+          final newContext = sessionManager.getContextMessages(sessionKey);
           messages.clear();
-          if (systemPrompt.isNotEmpty) {
-            messages.add(LlmMessage(role: 'system', content: systemPrompt));
-          }
+          messages.add(LlmMessage(role: 'system', content: systemPrompt));
           if (ephemeralContext != null) {
             messages.add(LlmMessage(role: 'system', content: ephemeralContext));
           }
-          messages.addAll(context);
+          messages.addAll(newContext);
         }
       }
 
-      // Option B: If still too large, emergency truncate tool results
-      final reestimatedTokens = _estimateContextTokens(context, systemPrompt);
-      if (reestimatedTokens > safeLimit) {
+      // Option B: If STILL too large (even the active context), emergency truncate
+      final currentTokens = _estimateContextTokens(messages, systemPrompt);
+      if (currentTokens > safeLimit) {
         _log.warning(
-          'Context still too large after compaction ($reestimatedTokens tokens), '
-          'applying emergency truncation',
+          'Current context still too large ($currentTokens tokens), applying emergency truncation',
         );
-        _truncateOldestToolResults(context, contextWindow);
-
-        // Rebuild messages with truncated context
-        messages.clear();
-        if (systemPrompt.isNotEmpty) {
-          messages.add(LlmMessage(role: 'system', content: systemPrompt));
-        }
-        if (ephemeralContext != null) {
-          messages.add(LlmMessage(role: 'system', content: ephemeralContext));
-        }
-        messages.addAll(context);
+        _truncateOldestToolResults(messages, safeLimit);
       }
     }
 
-    final tools = toolRegistry.toProviderDefs();
+    // Conditional tools: skip definitions for non-action turns to save tokens.
+    final tools = _shouldIncludeTools(message, activeContext)
+        ? toolRegistry.toProviderDefs()
+        : <Map<String, dynamic>>[];
+
     var toolCallsExecuted = 0;
     UsageInfo? totalUsage;
     var loopMessages = List<LlmMessage>.from(messages);
     var contentBuffer = '';
     var continuationRound = 0;
     const maxContinuations = 2; // up to 3 rounds × maxToolIterations total
-    final provCredStream = configManager.config.providerCredentials[modelEntry.provider];
+    final provCredStream =
+        configManager.config.providerCredentials[modelEntry.provider];
 
     // Resolve thinking/effort settings: keyword detection → session level → model default.
     final sessionMetaStream = sessionManager.getMeta(sessionKey);
@@ -1009,17 +1158,22 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       modelEntry,
       turnOverride: turnKeywordStream,
     );
-    final thinkingStream = _buildThinkingParams(thinkingLevelStream, modelEntry);
+    final thinkingStream = _buildThinkingParams(
+      thinkingLevelStream,
+      modelEntry,
+    );
 
     // Look up CatalogModel for cost tracking.
     final catalogModelStream = ModelCatalog.models
         .where((m) => m.id == modelEntry.model)
         .firstOrNull;
 
-    continuation: while (true) {
+    continuation:
+    while (true) {
       var maxIter = maxToolIterations;
 
       while (maxIter-- > 0) {
+        if (cancelToken?.isCancelled == true) return;
         contentBuffer = '';
         final request = LlmRequest(
           model: modelEntry.model,
@@ -1043,7 +1197,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         try {
           await for (final event in providerRouter.chatCompletionStream(
             request,
+            cancelToken: cancelToken,
           )) {
+            if (cancelToken?.isCancelled == true) return;
             if (event.contentDelta != null) {
               contentBuffer += event.contentDelta!;
               yield AgentStreamEvent(textDelta: event.contentDelta);
@@ -1072,7 +1228,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
               content: parsed.friendlyMessage,
               metadata: {
                 'error': true,
-                if (parsed.statusCode != null) 'errorStatusCode': parsed.statusCode,
+                if (parsed.statusCode != null)
+                  'errorStatusCode': parsed.statusCode,
                 if (parsed.errorTitle != null) 'errorTitle': parsed.errorTitle,
                 if (parsed.ctaUrl != null) 'errorCtaUrl': parsed.ctaUrl,
                 if (parsed.ctaLabel != null) 'errorCtaLabel': parsed.ctaLabel,
@@ -1096,15 +1253,19 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         }
 
         if (totalUsage != null) {
-          final costUsd = catalogModelStream?.computeCostUsd(
+          final costUsd =
+              catalogModelStream?.computeCostUsd(
                 inputTokens: totalUsage.promptTokens,
                 outputTokens: totalUsage.completionTokens,
                 cacheReadTokens: totalUsage.cacheReadTokens,
                 cacheWriteTokens: totalUsage.cacheWriteTokens,
               ) ??
               0.0;
-          await sessionManager.updateTokens(sessionKey, totalUsage,
-              costUsd: costUsd);
+          await sessionManager.updateTokens(
+            sessionKey,
+            totalUsage,
+            costUsd: costUsd,
+          );
         }
 
         if (toolCallsBuffer.isNotEmpty) {
@@ -1113,16 +1274,21 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
             role: 'assistant',
             content: contentBuffer,
             toolCalls: toolCallsBuffer,
+            usage: totalUsage,
           );
           await sessionManager.addMessage(sessionKey, assistantMsg);
           loopMessages.add(assistantMsg);
 
           for (final tc in toolCallsBuffer) {
+            if (cancelToken?.isCancelled == true) return;
             try {
               final args = _parseToolArgs(tc.function.arguments);
               args['__session_key'] = sessionKey;
               onToolStatus?.call(tc.function.name, args, isDone: false);
-              yield AgentStreamEvent(toolName: tc.function.name, toolArgs: args);
+              yield AgentStreamEvent(
+                toolName: tc.function.name,
+                toolArgs: args,
+              );
 
               // Use streaming execution when the tool supports it so incremental
               // output is shown in the expandable tool card as it arrives.
@@ -1131,23 +1297,33 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
 
               ToolResult result;
               try {
-                final chunkFuture = toolRegistry.executeWithProgress(
-                  tc.function.name,
-                  args,
-                  onChunk: (chunk) {
-                    if (!chunkCtrl.isClosed) {
-                      chunkCtrl.add(AgentStreamEvent(toolResultChunk: chunk));
-                    }
-                  },
-                ).then((r) {
-                  chunkCtrl.close();
-                  return r;
-                }).catchError((Object e, StackTrace st) {
-                  _log.severe('Streaming tool ${tc.function.name} threw', e, st);
-                  if (!chunkCtrl.isClosed) chunkCtrl.close();
-                  return ToolResult.error(
-                      'Tool "${tc.function.name}" crashed: $e');
-                });
+                final chunkFuture = toolRegistry
+                    .executeWithProgress(
+                      tc.function.name,
+                      args,
+                      onChunk: (chunk) {
+                        if (!chunkCtrl.isClosed) {
+                          chunkCtrl.add(
+                            AgentStreamEvent(toolResultChunk: chunk),
+                          );
+                        }
+                      },
+                    )
+                    .then((r) {
+                      chunkCtrl.close();
+                      return r;
+                    })
+                    .catchError((Object e, StackTrace st) {
+                      _log.severe(
+                        'Streaming tool ${tc.function.name} threw',
+                        e,
+                        st,
+                      );
+                      if (!chunkCtrl.isClosed) chunkCtrl.close();
+                      return ToolResult.error(
+                        'Tool "${tc.function.name}" crashed: $e',
+                      );
+                    });
 
                 await for (final chunkEvent in chunkCtrl.stream) {
                   yield chunkEvent;
@@ -1155,10 +1331,14 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
                 result = await chunkFuture;
               } catch (e, st) {
                 _log.severe(
-                    'Streaming tool ${tc.function.name} outer error', e, st);
+                  'Streaming tool ${tc.function.name} outer error',
+                  e,
+                  st,
+                );
                 if (!chunkCtrl.isClosed) chunkCtrl.close();
                 result = ToolResult.error(
-                    'Tool "${tc.function.name}" crashed: $e');
+                  'Tool "${tc.function.name}" crashed: $e',
+                );
               }
 
               onToolStatus?.call(tc.function.name, args, isDone: true);
@@ -1180,7 +1360,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
             } catch (e, st) {
               _log.severe(
                 'Outer streaming tool-call handling failed for ${tc.function.name}',
-                e, st,
+                e,
+                st,
               );
               // Ensure a tool_result is always written to prevent orphaned tool_use.
               final errorMsg = LlmMessage(
@@ -1203,11 +1384,16 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         // Final assistant response (no tool calls) — task complete
         await sessionManager.addMessage(
           sessionKey,
-          LlmMessage(role: 'assistant', content: contentBuffer),
+          LlmMessage(
+            role: 'assistant',
+            content: contentBuffer,
+            usage: totalUsage,
+          ),
         );
 
         // Auto-title: mirror the non-streaming path trigger
-        final streamSessionMeta = sessionManager.listSessions()
+        final streamSessionMeta = sessionManager
+            .listSessions()
             .where((s) => s.key == sessionKey)
             .firstOrNull;
         if (streamSessionMeta != null &&
@@ -1241,7 +1427,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         );
         final contMsg = LlmMessage(
           role: 'user',
-          content: '[Auto-continuing ($continuationRound/$maxContinuations). Resume the task.]',
+          content:
+              '[Auto-continuing ($continuationRound/$maxContinuations). Resume the task.]',
         );
         await sessionManager.addMessage(sessionKey, contMsg);
         loopMessages.add(contMsg);
@@ -1256,7 +1443,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     if (loopMessages.isNotEmpty && loopMessages.last.role == 'tool') {
       final limitMsg = LlmMessage(
         role: 'user',
-        content: '[Tool call limit reached after $toolCallsExecuted calls total '
+        content:
+            '[Tool call limit reached after $toolCallsExecuted calls total '
             '(${1 + maxContinuations} rounds). Summarize what you accomplished, '
             'what still needs to be done, and tell the user they can ask you to continue.]',
       );
@@ -1278,7 +1466,10 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
           awsAuthMode: provCredStream?.awsAuthMode,
         );
         contentBuffer = '';
-        await for (final event in providerRouter.chatCompletionStream(gracefulReq)) {
+        await for (final event in providerRouter.chatCompletionStream(
+          gracefulReq,
+          cancelToken: cancelToken,
+        )) {
           if (event.contentDelta != null) {
             contentBuffer += event.contentDelta!;
             yield AgentStreamEvent(textDelta: event.contentDelta);
@@ -1286,7 +1477,11 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         }
         await sessionManager.addMessage(
           sessionKey,
-          LlmMessage(role: 'assistant', content: contentBuffer),
+          LlmMessage(
+            role: 'assistant',
+            content: contentBuffer,
+            usage: totalUsage,
+          ),
         );
       } catch (_) {
         // Graceful stream failed — fall through to emit isDone with last buffer
@@ -1358,6 +1553,7 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
   Future<String?> compactSession(
     String sessionKey, {
     String? customInstructions,
+    CancellationToken? cancelToken,
   }) async {
     // -- Compaction safeguard -------------------------------------------------
     // If this session has failed compaction _kMaxCompactionFailures times in
@@ -1411,7 +1607,10 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     }
     // Re-read context: the memory flush (PR #18) may have appended messages.
     final freshContext = sessionManager.getContextMessages(sessionKey);
-    final toSummarize = freshContext.sublist(0, freshContext.length - keepRecent);
+    final toSummarize = freshContext.sublist(
+      0,
+      freshContext.length - keepRecent,
+    );
 
     if (toSummarize.isEmpty) return null;
 
@@ -1429,7 +1628,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       'Do not include greetings or filler.',
     );
     if (customInstructions != null && customInstructions.trim().isNotEmpty) {
-      systemInstruction.write('\n\nAdditional instructions: $customInstructions');
+      systemInstruction.write(
+        '\n\nAdditional instructions: $customInstructions',
+      );
     }
 
     final summaryMessages = <LlmMessage>[
@@ -1458,7 +1659,13 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         awsAuthMode: summCred?.awsAuthMode,
       );
 
-      final response = await providerRouter.chatCompletion(request);
+      final response = await providerRouter.chatCompletion(
+        request,
+        cancelToken: cancelToken,
+      );
+      if (cancelToken?.isCancelled == true) {
+        return null;
+      }
       final summary = response.content ?? '';
 
       if (summary.isEmpty) {
@@ -1474,8 +1681,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       final keptStartIndex = messageEntries.length - keepRecent;
       final firstKeptId =
           keptStartIndex >= 0 && keptStartIndex < messageEntries.length
-              ? messageEntries[keptStartIndex].id
-              : messageEntries.last.id;
+          ? messageEntries[keptStartIndex].id
+          : messageEntries.last.id;
 
       final tokensBefore = toSummarize.fold<int>(
         0,
@@ -1498,7 +1705,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       return summary;
     } catch (e) {
       _compactionFailures[sessionKey] = failures + 1;
-      _log.warning('Compaction failed for $sessionKey (attempt ${failures + 1}): $e');
+      _log.warning(
+        'Compaction failed for $sessionKey (attempt ${failures + 1}): $e',
+      );
       return null;
     }
   }
@@ -1518,8 +1727,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
   ) {
     Future(() async {
       try {
-        final cred = configManager.config.providerCredentials[
-            modelEntry.provider as String?];
+        final cred = configManager
+            .config
+            .providerCredentials[modelEntry.provider as String?];
         final request = LlmRequest(
           model: modelEntry.model as String,
           apiKey: configManager.config.resolveApiKey(modelEntry),
@@ -1534,13 +1744,11 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
             ),
             LlmMessage(
               role: 'user',
-              content: 'User: ${userMessage.substring(0, userMessage.length.clamp(0, 300))}\n'
+              content:
+                  'User: ${userMessage.substring(0, userMessage.length.clamp(0, 300))}\n'
                   'Assistant: ${assistantReply.substring(0, assistantReply.length.clamp(0, 200))}',
             ),
-            const LlmMessage(
-              role: 'user',
-              content: 'Session title:',
-            ),
+            const LlmMessage(role: 'user', content: 'Session title:'),
           ],
           maxTokens: 20,
           temperature: 0.3,
@@ -1555,10 +1763,7 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         final rawTitle = response.content?.trim() ?? '';
         if (rawTitle.isEmpty) return;
 
-        final title = rawTitle
-            .replaceAll('"', '')
-            .replaceAll("'", '')
-            .trim();
+        final title = rawTitle.replaceAll('"', '').replaceAll("'", '').trim();
         if (title.isNotEmpty && title.length <= 80) {
           await sessionManager.renameSession(sessionKey, title);
           _log.info('Auto-titled session $sessionKey: "$title"');
@@ -1619,7 +1824,7 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
                   'description': memoryTool.description,
                   'parameters': memoryTool.parameters,
                 },
-              }
+              },
             ]
           : <Map<String, dynamic>>[];
 
@@ -1645,7 +1850,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         ),
       ];
 
-      final flushCred = configManager.config.providerCredentials[modelEntry.provider as String?];
+      final flushCred = configManager
+          .config
+          .providerCredentials[modelEntry.provider as String?];
       final request = LlmRequest(
         model: modelEntry.model as String,
         apiKey: configManager.config.resolveApiKey(modelEntry),
@@ -1866,14 +2073,15 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
   Future<String> buildSystemPromptForAgent({
     String? agentId,
     String? userLanguage,
-  }) =>
-      _buildSystemPrompt(userLanguage: userLanguage, agentId: agentId);
+  }) => _buildSystemPrompt(userLanguage: userLanguage, agentId: agentId);
 
   // -- System prompt --------------------------------------------------------
 
   Future<String> _buildSystemPrompt({
     String? userLanguage,
     String? agentId,
+    String? message,
+    List<LlmMessage>? context,
   }) async {
     String workspace;
     if (agentId != null) {
@@ -1916,7 +2124,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     );
     runtimeSection.writeln('- **Bold text** for emphasis: `**bold**`');
     runtimeSection.writeln('- *Italic text* for subtle emphasis: `*italic*`');
-    runtimeSection.writeln('- Code blocks with syntax highlighting: \\`\\`\\`language\\ncode\\n\\`\\`\\`');
+    runtimeSection.writeln(
+      '- Code blocks with syntax highlighting: \\`\\`\\`language\\ncode\\n\\`\\`\\`',
+    );
     runtimeSection.writeln('- Inline code: \\`code\\`');
     runtimeSection.writeln('- Lists (ordered and unordered)');
     runtimeSection.writeln('- Headers (# H1, ## H2, ### H3)');
@@ -1941,8 +2151,10 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
 
     sections.add(await _buildCapabilitySnapshot());
 
-    // Android UI automation strategy guidance (includes device-specific tips)
-    if (Platform.isAndroid) {
+    // Android UI automation strategy guidance (includes device-specific tips).
+    // Conditional: only inject if task seems UI-related to save tokens.
+    if (Platform.isAndroid &&
+        _shouldIncludeUiGuidance(message ?? '', context ?? [])) {
       sections.add(await _buildUiAutomationGuidance());
     }
 
@@ -2022,6 +2234,79 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
       return '${joined.substring(0, totalLimit)}\n\n[... system prompt truncated at 150,000 chars ...]';
     }
     return joined;
+  }
+
+  /// Returns true if the user message or recent context indicates a UI automation task.
+  bool _shouldIncludeUiGuidance(String message, List<LlmMessage> context) {
+    final msgLower = message.toLowerCase();
+    const keywords = [
+      'android',
+      'app',
+      'settings',
+      'phone',
+      'device',
+      'click',
+      'tap',
+      'swipe',
+      'screenshot',
+      'open',
+      'install',
+      'uninstall',
+      'configuration',
+      'ui',
+    ];
+
+    if (keywords.any((k) => msgLower.contains(k))) return true;
+
+    // Check if any UI tools were used in the last 5 turns.
+    final recent = context.length > 5
+        ? context.sublist(context.length - 5)
+        : context;
+    for (final m in recent) {
+      if (m.toolCalls != null &&
+          m.toolCalls!.any((tc) => tc.function.name.startsWith('ui_'))) {
+        return true;
+      }
+      if (m.role == 'tool' && (m.name?.startsWith('ui_') ?? false)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /// Returns true if tools should be provided for the current turn.
+  /// Skips tools for simple greetings if no tools were used in the previous turn.
+  bool _shouldIncludeTools(String message, List<LlmMessage> context) {
+    final msgLower = message.trim().toLowerCase();
+
+    // Always provide tools for non-conversational short messages.
+    if (msgLower.length < 2) return true;
+
+    // Simple greetings/closings
+    const greetings = [
+      'hello',
+      'hi',
+      'hey',
+      'thanks',
+      'thank you',
+      'bye',
+      'goodbye',
+      'ok',
+      'okay',
+      'cool',
+      'understood',
+      'got it',
+    ];
+
+    if (greetings.contains(msgLower)) {
+      // Only skip if the previous message wasn't a tool result (we might be in a loop).
+      if (context.isNotEmpty && context.last.role != 'tool') {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   String _dateString(DateTime dt) =>
@@ -2132,8 +2417,8 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
         .where((m) => m.id == modelEntry.model)
         .firstOrNull;
 
-    final isAnthropicProvider = modelEntry.provider == 'anthropic' ||
-        modelEntry.provider == 'bedrock';
+    final isAnthropicProvider =
+        modelEntry.provider == 'anthropic' || modelEntry.provider == 'bedrock';
 
     if (isAnthropicProvider) {
       if (catalog?.supportsAdaptiveThinking == true) {
@@ -2156,7 +2441,6 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
 
     return (thinkingBudget: null, effort: null);
   }
-
 
   String _getLanguageName(String languageCode) {
     const languageNames = {
@@ -2219,8 +2503,9 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     if (context.length < 15) return false; // Too short to compact
 
     // Check if last compaction was recent
-    final lastCompactEntry =
-        await sessionManager.getLastCompactionEntry(sessionKey);
+    final lastCompactEntry = await sessionManager.getLastCompactionEntry(
+      sessionKey,
+    );
     if (lastCompactEntry != null) {
       // Don't compact if recently compacted (within last 10 messages)
       if (context.length < 20) {
@@ -2238,15 +2523,11 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
   ///
   /// Note: Modifies messages in place by creating new LlmMessage objects
   /// since content is final.
-  void _truncateOldestToolResults(
-    List<LlmMessage> context,
-    int contextWindow,
-  ) {
+  void _truncateOldestToolResults(List<LlmMessage> context, int contextWindow) {
     final targetTokens = (contextWindow * 0.70).toInt();
     var currentTokens = context.fold<int>(
       0,
-      (sum, msg) =>
-          sum + TokenBudgetManager.estimateTokens(msg.content ?? ''),
+      (sum, msg) => sum + TokenBudgetManager.estimateTokens(msg.content ?? ''),
     );
 
     _log.warning(
@@ -2255,12 +2536,16 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     );
 
     // Walk backwards, replace tool results until under budget
-    for (var i = context.length - 1; i >= 0 && currentTokens > targetTokens;
-        i--) {
+    for (
+      var i = context.length - 1;
+      i >= 0 && currentTokens > targetTokens;
+      i--
+    ) {
       final msg = context[i];
       if (msg.role == 'tool' && (msg.content?.length ?? 0) > 5000) {
-        final originalTokens =
-            TokenBudgetManager.estimateTokens(msg.content ?? '');
+        final originalTokens = TokenBudgetManager.estimateTokens(
+          msg.content ?? '',
+        );
 
         // Create new message with truncated content
         final truncatedContent =
@@ -2311,8 +2596,11 @@ If you have exhausted ALL approaches above (minimum 8-10 different attempts) and
     // Prefer models with "mini", "haiku", "flash", "small", "nano" in their ID
     final small = models.where((m) {
       final id = m.model.toLowerCase();
-      return id.contains('mini') || id.contains('haiku') ||
-             id.contains('flash') || id.contains('small') || id.contains('nano');
+      return id.contains('mini') ||
+          id.contains('haiku') ||
+          id.contains('flash') ||
+          id.contains('small') ||
+          id.contains('nano');
     }).toList();
     if (small.isNotEmpty) return small.first.modelName;
     return models.first.modelName;

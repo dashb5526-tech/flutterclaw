@@ -73,7 +73,10 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
       final identityFile = File('$ws/IDENTITY.md');
       if (!await identityFile.exists()) return;
       final content = await identityFile.readAsString();
-      final match = RegExp(r'^Vibe:\s*(.+)$', multiLine: true).firstMatch(content);
+      final match = RegExp(
+        r'^Vibe:\s*(.+)$',
+        multiLine: true,
+      ).firstMatch(content);
       final vibe = match?.group(1)?.trim();
       if (vibe != null && vibe.isNotEmpty && mounted) {
         setState(() => _vibeController.text = vibe);
@@ -101,8 +104,7 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
     if (_fixedLiveModelSelection) return;
     _fixedLiveModelSelection = true;
     final config = ref.read(configManagerProvider).config;
-    final chat =
-        config.modelList.where((m) => !m.isLiveOnly).toList();
+    final chat = config.modelList.where((m) => !m.isLiveOnly).toList();
     if (_selectedModel != null &&
         chat.isNotEmpty &&
         !chat.any((m) => m.modelName == _selectedModel)) {
@@ -126,7 +128,9 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditMode ? context.l10n.editAgent : context.l10n.createAgent),
+        title: Text(
+          _isEditMode ? context.l10n.editAgent : context.l10n.createAgent,
+        ),
         actions: [
           if (_isLoading)
             const Center(
@@ -140,10 +144,7 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
               ),
             )
           else
-            TextButton(
-              onPressed: _saveAgent,
-              child: Text(context.l10n.save),
-            ),
+            TextButton(onPressed: _saveAgent, child: Text(context.l10n.save)),
         ],
       ),
       body: models.isEmpty
@@ -184,9 +185,9 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
             const SizedBox(height: 8),
             Text(
               context.l10n.noModelsConfiguredLong,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -194,8 +195,8 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) =>
-                        const ProvidersModelsScreen()),
+                  builder: (_) => const ProvidersModelsScreen(),
+                ),
               ),
               icon: const Icon(Icons.add),
               label: Text(context.l10n.addModel),
@@ -304,7 +305,7 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedModel,
+              initialValue: _selectedModel,
               decoration: InputDecoration(
                 labelText: context.l10n.model,
                 border: const OutlineInputBorder(),
@@ -321,17 +322,32 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
                     children: [
                       Flexible(
                         fit: FlexFit.loose,
-                        child: Text(model.modelName, overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          model.modelName,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(width: 8),
-                      Icon(Icons.text_fields, size: 14, color: Colors.grey.shade500),
+                      Icon(
+                        Icons.text_fields,
+                        size: 14,
+                        color: Colors.grey.shade500,
+                      ),
                       if (supportsVision) ...[
                         const SizedBox(width: 4),
-                        Icon(Icons.image_outlined, size: 14, color: Colors.blue.shade400),
+                        Icon(
+                          Icons.image_outlined,
+                          size: 14,
+                          color: Colors.blue.shade400,
+                        ),
                       ],
                       if (supportsAudio) ...[
                         const SizedBox(width: 4),
-                        Icon(Icons.mic_outlined, size: 14, color: Colors.orange.shade400),
+                        Icon(
+                          Icons.mic_outlined,
+                          size: 14,
+                          color: Colors.orange.shade400,
+                        ),
                       ],
                     ],
                   ),
@@ -354,7 +370,9 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  context.l10n.temperatureLabel(_temperature.toStringAsFixed(1)),
+                  context.l10n.temperatureLabel(
+                    _temperature.toStringAsFixed(1),
+                  ),
                   style: theme.textTheme.bodyMedium,
                 ),
                 Text(
@@ -382,9 +400,24 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(context.l10n.focusedLabel, style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
-                Text(context.l10n.balancedLabel, style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
-                Text(context.l10n.creativeLabel, style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+                Text(
+                  context.l10n.focusedLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  context.l10n.balancedLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  context.l10n.creativeLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -494,7 +527,16 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
     const emojis = [
       // People & Roles
       '🤖', '💻', '✍️', '🎨', '🔬', '📚', '🎭', '🎵', '🏃', '💼',
-      '👨‍💻', '👩‍💻', '🧑‍🔬', '🧑‍🎨', '🧑‍🏫', '🧑‍⚕️', '🧑‍🍳', '🧑‍🚀', '🕵️', '🦸',
+      '👨‍💻',
+      '👩‍💻',
+      '🧑‍🔬',
+      '🧑‍🎨',
+      '🧑‍🏫',
+      '🧑‍⚕️',
+      '🧑‍🍳',
+      '🧑‍🚀',
+      '🕵️',
+      '🦸',
       // Objects & Tools
       '🌟', '🔥', '💡', '🚀', '🎯', '🧠', '💬', '📱', '⚡', '🌈',
       '🎓', '🏆', '💪', '🔧', '📊', '🗂️', '📝', '🔍', '💰', '🛡️',
@@ -625,20 +667,36 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
           final identityFile = File('$ws/IDENTITY.md');
           if (await identityFile.exists()) {
             var content = await identityFile.readAsString();
-            content = ConfigManager.updateIdentityField(content, 'Name', newName);
-            content = ConfigManager.updateIdentityField(content, 'Emoji', _selectedEmoji);
-            content = ConfigManager.updateIdentityField(content, 'Model', _selectedModel!);
+            content = ConfigManager.updateIdentityField(
+              content,
+              'Name',
+              newName,
+            );
+            content = ConfigManager.updateIdentityField(
+              content,
+              'Emoji',
+              _selectedEmoji,
+            );
+            content = ConfigManager.updateIdentityField(
+              content,
+              'Model',
+              _selectedModel!,
+            );
             if (newVibe != null) {
-              content = ConfigManager.updateIdentityField(content, 'Vibe', newVibe);
+              content = ConfigManager.updateIdentityField(
+                content,
+                'Vibe',
+                newVibe,
+              );
             }
             await identityFile.writeAsString(content);
           }
         } catch (_) {}
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.agentUpdated)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.agentUpdated)));
           Navigator.pop(context);
         }
       } else {
@@ -661,20 +719,22 @@ class _CreateAgentScreenState extends ConsumerState<CreateAgentScreen> {
 
         // Add to config and set as active
         final updatedProfiles = [...config.agentProfiles, newAgent];
-        configManager.update(config.copyWith(
-          agentProfiles: updatedProfiles,
-          // Always set new agent as active
-          activeAgentId: newAgent.id,
-        ));
+        configManager.update(
+          config.copyWith(
+            agentProfiles: updatedProfiles,
+            // Always set new agent as active
+            activeAgentId: newAgent.id,
+          ),
+        );
         await configManager.save();
         ref.invalidate(agentProfilesProvider);
         ref.invalidate(activeAgentProvider);
         ref.invalidate(activeWorkspacePathProvider);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.agentCreated)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.agentCreated)));
           Navigator.pop(context);
         }
       }

@@ -30,6 +30,7 @@ import 'package:flutterclaw/services/plugin_service.dart';
 import 'package:flutterclaw/services/skills_service.dart';
 import 'package:flutterclaw/data/models/model_catalog.dart';
 import 'package:flutterclaw/core/agent/agent_loop.dart';
+import 'package:flutterclaw/core/agent/cancel_token.dart';
 import 'package:flutterclaw/core/agent/token_budget_manager.dart';
 import 'package:flutterclaw/core/agent/provider_router.dart';
 import 'package:flutterclaw/core/agent/live_session_transcript.dart';
@@ -1351,6 +1352,9 @@ class ChatMessage {
   /// The chat UI renders these below the message text as touch-friendly widgets.
   final InteractiveReply? interactiveReply;
 
+  /// Token usage information for this response.
+  final UsageInfo? usage;
+
   const ChatMessage({
     required this.text,
     required this.isUser,
@@ -1372,6 +1376,7 @@ class ChatMessage {
     this.isShellCommand = false,
     this.isBtw = false,
     this.interactiveReply,
+    this.usage,
   });
 
   ChatMessage copyWith({
@@ -1386,6 +1391,7 @@ class ChatMessage {
     String? errorCtaUrl,
     String? errorCtaLabel,
     InteractiveReply? interactiveReply,
+    UsageInfo? usage,
   }) => ChatMessage(
     text: text ?? this.text,
     isUser: isUser,
@@ -1405,6 +1411,7 @@ class ChatMessage {
     errorCtaUrl: errorCtaUrl ?? this.errorCtaUrl,
     errorCtaLabel: errorCtaLabel ?? this.errorCtaLabel,
     interactiveReply: interactiveReply ?? this.interactiveReply,
+    usage: usage ?? this.usage,
   );
 }
 
@@ -1479,6 +1486,18 @@ class _UnsafeModeNotifier extends Notifier<bool> {
   }
 }
 
+/// Reactive state for whether the chat is currently processing a message.
+/// Used by the UI to show/hide the Stop button.
+final chatProcessingProvider = NotifierProvider<ChatProcessingNotifier, bool>(
+  ChatProcessingNotifier.new,
+);
+
+class ChatProcessingNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool value) => state = value;
+}
+
 final chatProvider = NotifierProvider<ChatNotifier, List<ChatMessage>>(
   ChatNotifier.new,
 );
@@ -1511,24 +1530,49 @@ class TtsSpeakingMsgNotifier extends Notifier<String?> {
 }
 
 class ChatNotifier extends Notifier<List<ChatMessage>> {
-  bool _processing = false;
-  bool get isProcessing => _processing;
+  bool __processing = false;
+  bool get _processing => __processing;
+  set _processing(bool value) {
+    if (__processing == value) return;
+    __processing = value;
+    // Sync with the reactive provider so the UI rebuilds.
+    Future.microtask(() {
+      if (ref.read(chatProcessingProvider) != value) {
+        ref.read(chatProcessingProvider.notifier).set(value);
+      }
+    });
+  }
+
+  static final _log = Logger('ChatNotifier');
+
+  bool get isProcessing => __processing;
+
   bool _cancelled = false;
   StreamSubscription<AgentStreamEvent>? _activeSubscription;
+  Completer<void>? _activeCompleter;
   Timer? _liveTranscriptFlushTimer;
   final StringBuffer _liveUserDeltaBuf = StringBuffer();
   final StringBuffer _liveModelDeltaBuf = StringBuffer();
   bool _hatchTriggered = false;
   String? _historyLoadedForAgent; // agentId whose history is currently loaded
   bool _isAppInBackground = false;
+  CancellationToken? _cancelToken;
 
   /// Cancel the current streaming response. The active stream loop checks this
   /// flag on each event and breaks early, finalising the partial response.
   void cancelProcessing() {
-    if (!_processing) return;
+    if (!isProcessing) return;
     _cancelled = true;
+    _cancelToken?.cancel();
     _activeSubscription?.cancel();
     _activeSubscription = null;
+
+    // Immediately complete the wait future so the async loop finishes.
+    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
+      _activeCompleter!.complete();
+    }
+    _activeCompleter = null;
+
     // Immediately mark the last assistant bubble as done so the UI updates.
     final updated = List<ChatMessage>.from(state);
     if (updated.isNotEmpty && !updated.last.isUser) {
@@ -1569,6 +1613,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
     void Function(AgentStreamEvent event) onData,
   ) async {
     final completer = Completer<void>();
+    _activeCompleter = completer;
     final sub = stream.listen(
       (event) {
         if (_cancelled) return;
@@ -1587,6 +1632,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
       await completer.future;
     } finally {
       _activeSubscription = null;
+      _activeCompleter = null;
     }
   }
 
@@ -1925,6 +1971,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
     _historyLoadedForAgent = sessionKey;
 
     final sessionManager = ref.read(sessionManagerProvider);
+    await sessionManager.ensureLoaded(sessionKey);
 
     final history = sessionManager.getContextMessages(sessionKey);
 
@@ -1973,7 +2020,12 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
         final text = _extractTextFromContent(msg.content);
         if (text.trim().isNotEmpty) {
           messages.add(
-            ChatMessage(text: text, isUser: false, timestamp: DateTime.now()),
+            ChatMessage(
+              text: text,
+              isUser: false,
+              timestamp: DateTime.now(),
+              usage: msg.usage,
+            ),
           );
         }
         continue;
@@ -2007,6 +2059,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
           errorTitle: errorTitle,
           errorCtaUrl: errorCtaUrl,
           errorCtaLabel: errorCtaLabel,
+          usage: msg.usage,
         ),
       );
     }
@@ -2040,6 +2093,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
     // Hatch: trigger the agent without persisting a visible user message.
     // The BOOTSTRAP.md in the system prompt tells the agent what to do.
     _cancelled = false;
+    _cancelToken = CancellationToken();
     _processing = true;
     state = [
       ChatMessage(
@@ -2071,6 +2125,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
           channelType: 'webchat',
           chatId: 'default',
           userLanguage: userLanguage,
+          cancelToken: _cancelToken,
         ),
         (event) {
           if (event.toolName != null) {
@@ -2128,6 +2183,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
               errorTitle: resp?.errorTitle,
               errorCtaUrl: resp?.errorCtaUrl,
               errorCtaLabel: resp?.errorCtaLabel,
+              usage: resp?.usage,
             );
             state = updated;
 
@@ -2197,6 +2253,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
     ];
 
     _processing = true;
+    _cancelToken = CancellationToken();
 
     state = [
       ...state,
@@ -2238,6 +2295,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
           channelType: 'webchat',
           chatId: 'default',
           contentBlocks: contentBlocks,
+          cancelToken: _cancelToken,
         ),
         (event) {
           if (event.textDelta != null) {
@@ -2260,6 +2318,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
               errorTitle: resp?.errorTitle,
               errorCtaUrl: resp?.errorCtaUrl,
               errorCtaLabel: resp?.errorCtaLabel,
+              usage: resp?.usage,
             );
             state = updated;
 
@@ -2365,6 +2424,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
           channelType: 'webchat',
           chatId: 'default',
           contentBlocks: contentBlocks,
+          cancelToken: _cancelToken,
         ),
         (event) {
           if (event.textDelta != null) {
@@ -2387,6 +2447,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
               errorTitle: resp?.errorTitle,
               errorCtaUrl: resp?.errorCtaUrl,
               errorCtaLabel: resp?.errorCtaLabel,
+              usage: resp?.usage,
             );
             state = updated;
 
@@ -2463,6 +2524,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
   }) async {
     if (_processing) return;
     _cancelled = false;
+    _cancelToken = CancellationToken();
 
     if (showUserMessage) {
       state = [
@@ -2524,6 +2586,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
           text,
           channelType: channelType,
           chatId: chatId,
+          cancelToken: _cancelToken,
         ),
         (event) {
           if (event.toolName != null) {
@@ -2546,7 +2609,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
           if (event.toolResultChunk != null) {
             final chunk = event.toolResultChunk!;
             final isClear = chunk.startsWith('\x00CLEAR\x00');
-            print('[ChatNotifier] toolResultChunk len=${chunk.length} isClear=$isClear');
+            _log.info('toolResultChunk len=${chunk.length} isClear=$isClear');
             final updated = List<ChatMessage>.from(state);
             bool found = false;
             for (var i = updated.length - 1; i >= 0; i--) {
@@ -2559,17 +2622,17 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
                 } else {
                   newText = (updated[i].toolResultText ?? '') + chunk;
                 }
-                print('[ChatNotifier] → updating pill at i=$i, newText len=${newText.length}');
+                _log.info('→ updating pill at i=$i, newText len=${newText.length}');
                 updated[i] = updated[i].copyWith(toolResultText: newText);
                 break;
               }
             }
-            if (!found) print('[ChatNotifier] ⚠ no streaming pill found for chunk!');
+            if (!found) _log.warning('no streaming pill found for chunk!');
             state = updated;
           }
 
           if (event.toolResult != null) {
-            print('[ChatNotifier] toolResult len=${event.toolResult!.length}');
+            _log.info('toolResult len=${event.toolResult!.length}');
             final updated = List<ChatMessage>.from(state);
             bool found = false;
             for (var i = updated.length - 1; i >= 0; i--) {
@@ -2581,7 +2644,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
                 // Fall back to event.toolResult if no CLEAR chunk arrived.
                 final existing = updated[i].toolResultText;
                 final useExisting = existing != null && existing.isNotEmpty;
-                print('[ChatNotifier] → marking pill at i=$i as done, useExisting=$useExisting existing=${existing?.length}');
+                _log.info('→ marking pill at i=$i as done, useExisting=$useExisting existing=${existing?.length}');
                 updated[i] = updated[i].copyWith(
                   isStreaming: false,
                   toolResultText: useExisting ? existing : event.toolResult,
@@ -2589,7 +2652,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
                 break;
               }
             }
-            if (!found) print('[ChatNotifier] ⚠ no streaming pill found for toolResult!');
+            if (!found) _log.warning('no streaming pill found for toolResult!');
             state = updated;
           }
 
@@ -2612,6 +2675,7 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
               errorTitle: resp?.errorTitle,
               errorCtaUrl: resp?.errorCtaUrl,
               errorCtaLabel: resp?.errorCtaLabel,
+              usage: resp?.usage,
             );
             state = updated;
 
@@ -2801,10 +2865,11 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
     return null;
   }
 
-  void clear() {
+  Future<void> clear() async {
+    final key = _getSessionKey();
+    await ref.read(sessionManagerProvider).reset(key);
     state = [];
-    _historyLoadedForAgent =
-        _getSessionKey(); // prevent reloading cleared history
+    _historyLoadedForAgent = key; // prevent reloading cleared history
   }
 
   /// Switch to any session by key. Clears the UI and loads that session's history.

@@ -30,19 +30,16 @@ class WebSearchTool extends Tool {
 
   @override
   Map<String, dynamic> get parameters => {
-        'type': 'object',
-        'properties': {
-          'query': {
-            'type': 'string',
-            'description': 'Search query.',
-          },
-          'count': {
-            'type': 'integer',
-            'description': 'Maximum number of results to return (default 5).',
-          },
-        },
-        'required': ['query'],
-      };
+    'type': 'object',
+    'properties': {
+      'query': {'type': 'string', 'description': 'Search query.'},
+      'count': {
+        'type': 'integer',
+        'description': 'Maximum number of results to return (default 5).',
+      },
+    },
+    'required': ['query'],
+  };
 
   @override
   Future<ToolResult> execute(Map<String, dynamic> args) async {
@@ -173,11 +170,7 @@ class WebSearchTool extends Tool {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         'https://api.tavily.com/search',
-        data: {
-          'api_key': cfg.apiKey,
-          'query': query,
-          'max_results': count,
-        },
+        data: {'api_key': cfg.apiKey, 'query': query, 'max_results': count},
         options: Options(validateStatus: (s) => s != null && s < 400),
       );
 
@@ -234,26 +227,23 @@ class WebFetchTool extends Tool {
 
   @override
   Map<String, dynamic> get parameters => {
-        'type': 'object',
-        'properties': {
-          'url': {
-            'type': 'string',
-            'description': 'URL to fetch.',
-          },
-          'max_chars': {
-            'type': 'integer',
-            'description': 'Maximum characters to return (default 50000).',
-          },
-          'headless': {
-            'type': 'boolean',
-            'description':
-                'Use headless browser with JS support (default: false). '
-                'Slower but works with SPAs and JS-rendered content. '
-                'Auto-enabled when static fetch yields little content.',
-          },
-        },
-        'required': ['url'],
-      };
+    'type': 'object',
+    'properties': {
+      'url': {'type': 'string', 'description': 'URL to fetch.'},
+      'max_chars': {
+        'type': 'integer',
+        'description': 'Maximum characters to return (default 50000).',
+      },
+      'headless': {
+        'type': 'boolean',
+        'description':
+            'Use headless browser with JS support (default: false). '
+            'Slower but works with SPAs and JS-rendered content. '
+            'Auto-enabled when static fetch yields little content.',
+      },
+    },
+    'required': ['url'],
+  };
 
   @override
   Future<ToolResult> execute(Map<String, dynamic> args) async {
@@ -364,7 +354,9 @@ class WebFetchTool extends Tool {
             return;
           case 'p':
           case 'div':
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             buffer.writeln();
             return;
           case 'br':
@@ -390,16 +382,22 @@ class WebFetchTool extends Tool {
             return;
           case 'li':
             buffer.write('- ');
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             buffer.writeln();
             return;
           case 'ul':
           case 'ol':
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             buffer.writeln();
             return;
           default:
-            for (final child in node.nodes) visit(child);
+            for (final child in node.nodes) {
+              visit(child);
+            }
             return;
         }
       }
@@ -439,19 +437,16 @@ class WebImageSearchTool extends Tool {
 
   @override
   Map<String, dynamic> get parameters => {
-        'type': 'object',
-        'properties': {
-          'query': {
-            'type': 'string',
-            'description': 'Image search query.',
-          },
-          'count': {
-            'type': 'integer',
-            'description': 'Number of images to return (default 5, max 10).',
-          },
-        },
-        'required': ['query'],
-      };
+    'type': 'object',
+    'properties': {
+      'query': {'type': 'string', 'description': 'Image search query.'},
+      'count': {
+        'type': 'integer',
+        'description': 'Number of images to return (default 5, max 10).',
+      },
+    },
+    'required': ['query'],
+  };
 
   @override
   Future<ToolResult> execute(Map<String, dynamic> args) async {
@@ -492,7 +487,8 @@ class WebImageSearchTool extends Tool {
       // then falls back to any sufficiently large <img> on the page.
       final jsResult = await headlessBrowser!.execute({
         'action': 'js',
-        'script': '''
+        'script':
+            '''
           (function() {
             var count = $count;
             var results = [];
@@ -532,7 +528,9 @@ class WebImageSearchTool extends Tool {
       });
 
       if (jsResult.isError) {
-        return ToolResult.error('Could not extract images: ${jsResult.content}');
+        return ToolResult.error(
+          'Could not extract images: ${jsResult.content}',
+        );
       }
 
       final raw = jsResult.content.trim();

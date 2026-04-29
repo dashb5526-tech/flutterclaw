@@ -21,7 +21,13 @@ const _uuid = Uuid();
 // Action Item model
 // ---------------------------------------------------------------------------
 
-enum ActionItemType { automationResult, watcherAlert, cronResult, notification, task }
+enum ActionItemType {
+  automationResult,
+  watcherAlert,
+  cronResult,
+  notification,
+  task,
+}
 
 enum ActionItemStatus { unread, read, dismissed }
 
@@ -52,47 +58,47 @@ class ActionItem {
     this.status = ActionItemStatus.unread,
     this.readAt,
     this.metadata = const {},
-  })  : id = id ?? _uuid.v4(),
-        createdAt = createdAt ?? DateTime.now();
+  }) : id = id ?? _uuid.v4(),
+       createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type.name,
-        'priority': priority.name,
-        'title': title,
-        'body': body,
-        if (source.isNotEmpty) 'source': source,
-        'created_at': createdAt.toIso8601String(),
-        'status': status.name,
-        if (readAt != null) 'read_at': readAt!.toIso8601String(),
-        if (metadata.isNotEmpty) 'metadata': metadata,
-      };
+    'id': id,
+    'type': type.name,
+    'priority': priority.name,
+    'title': title,
+    'body': body,
+    if (source.isNotEmpty) 'source': source,
+    'created_at': createdAt.toIso8601String(),
+    'status': status.name,
+    if (readAt != null) 'read_at': readAt!.toIso8601String(),
+    if (metadata.isNotEmpty) 'metadata': metadata,
+  };
 
   factory ActionItem.fromJson(Map<String, dynamic> json) => ActionItem(
-        id: json['id'] as String?,
-        type: ActionItemType.values.firstWhere(
-          (t) => t.name == (json['type'] as String? ?? 'notification'),
-          orElse: () => ActionItemType.notification,
-        ),
-        priority: ActionItemPriority.values.firstWhere(
-          (p) => p.name == (json['priority'] as String? ?? 'normal'),
-          orElse: () => ActionItemPriority.normal,
-        ),
-        title: json['title'] as String? ?? '',
-        body: json['body'] as String? ?? '',
-        source: json['source'] as String? ?? '',
-        createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'] as String)
-            : null,
-        status: ActionItemStatus.values.firstWhere(
-          (s) => s.name == (json['status'] as String? ?? 'unread'),
-          orElse: () => ActionItemStatus.unread,
-        ),
-        readAt: json['read_at'] != null
-            ? DateTime.parse(json['read_at'] as String)
-            : null,
-        metadata: (json['metadata'] as Map<String, dynamic>?) ?? {},
-      );
+    id: json['id'] as String?,
+    type: ActionItemType.values.firstWhere(
+      (t) => t.name == (json['type'] as String? ?? 'notification'),
+      orElse: () => ActionItemType.notification,
+    ),
+    priority: ActionItemPriority.values.firstWhere(
+      (p) => p.name == (json['priority'] as String? ?? 'normal'),
+      orElse: () => ActionItemPriority.normal,
+    ),
+    title: json['title'] as String? ?? '',
+    body: json['body'] as String? ?? '',
+    source: json['source'] as String? ?? '',
+    createdAt: json['created_at'] != null
+        ? DateTime.parse(json['created_at'] as String)
+        : null,
+    status: ActionItemStatus.values.firstWhere(
+      (s) => s.name == (json['status'] as String? ?? 'unread'),
+      orElse: () => ActionItemStatus.unread,
+    ),
+    readAt: json['read_at'] != null
+        ? DateTime.parse(json['read_at'] as String)
+        : null,
+    metadata: (json['metadata'] as Map<String, dynamic>?) ?? {},
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +117,8 @@ class ActionCenterService {
 
   List<ActionItem> get items => List.unmodifiable(_items);
 
-  int get unreadCount => _items.where((i) => i.status == ActionItemStatus.unread).length;
+  int get unreadCount =>
+      _items.where((i) => i.status == ActionItemStatus.unread).length;
 
   /// Load items from disk.
   Future<void> load() async {
@@ -202,9 +209,13 @@ class ActionCenterService {
       // Sort: unread first, then by date descending
       _items.sort((a, b) {
         if (a.status == ActionItemStatus.unread &&
-            b.status != ActionItemStatus.unread) return -1;
+            b.status != ActionItemStatus.unread) {
+          return -1;
+        }
         if (b.status == ActionItemStatus.unread &&
-            a.status != ActionItemStatus.unread) return 1;
+            a.status != ActionItemStatus.unread) {
+          return 1;
+        }
         return b.createdAt.compareTo(a.createdAt);
       });
       if (_items.length > maxItems) {

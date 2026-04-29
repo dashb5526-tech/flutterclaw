@@ -1,13 +1,21 @@
 /// Base interface and model classes for LLM providers.
 library;
 
+import '../agent/cancel_token.dart';
+
 /// Base interface for LLM providers.
 abstract class LlmProvider {
   String get name;
   String get defaultApiBase;
 
-  Future<LlmResponse> chatCompletion(LlmRequest request);
-  Stream<LlmStreamEvent> chatCompletionStream(LlmRequest request);
+  Future<LlmResponse> chatCompletion(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  });
+  Stream<LlmStreamEvent> chatCompletionStream(
+    LlmRequest request, {
+    CancellationToken? cancelToken,
+  });
 }
 
 /// Request payload for chat completion.
@@ -128,6 +136,9 @@ class LlmMessage {
   /// Optional metadata (e.g. error info). Persisted in JSONL but ignored by LLM APIs.
   final Map<String, dynamic>? metadata;
 
+  /// Optional token usage info for assistant messages.
+  final UsageInfo? usage;
+
   const LlmMessage({
     required this.role,
     required this.content,
@@ -135,6 +146,7 @@ class LlmMessage {
     this.toolCalls,
     this.toolCallId,
     this.metadata,
+    this.usage,
   });
 
   Map<String, dynamic> toJson() => {
@@ -145,6 +157,7 @@ class LlmMessage {
       'tool_calls': toolCalls!.map((e) => e.toJson()).toList(),
     if (toolCallId != null) 'tool_call_id': toolCallId,
     if (metadata != null) '_metadata': metadata,
+    if (usage != null) 'usage': usage!.toJson(),
   };
 
   factory LlmMessage.fromJson(Map<String, dynamic> json) => LlmMessage(
@@ -156,6 +169,9 @@ class LlmMessage {
         .toList(),
     toolCallId: json['tool_call_id'] as String?,
     metadata: json['_metadata'] as Map<String, dynamic>?,
+    usage: json['usage'] != null
+        ? UsageInfo.fromJson(json['usage'] as Map<String, dynamic>)
+        : null,
   );
 }
 

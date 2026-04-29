@@ -40,15 +40,10 @@ class _GatewayResult {
   final String? error;
   final bool success;
 
-  _GatewayResult.success(this.gateway)
-      : error = null,
-        success = true;
+  _GatewayResult.success(this.gateway) : error = null, success = true;
 
-  _GatewayResult.failure(this.error)
-      : gateway = null,
-        success = false;
+  _GatewayResult.failure(this.error) : gateway = null, success = false;
 }
-
 
 /// Formats uptime seconds into a short human-readable string.
 String _formatUptime(int seconds) {
@@ -103,7 +98,8 @@ class FlutterClawTaskHandler extends TaskHandler {
     _configManager = ConfigManager();
     await _configManager!.ensureDirectories();
     await _configManager!.load();
-    _model = _configManager!.config.activeAgent?.modelName ??
+    _model =
+        _configManager!.config.activeAgent?.modelName ??
         _configManager!.config.agents.defaults.modelName;
     _host = _configManager!.config.gateway.host;
     _port = _configManager!.config.gateway.port;
@@ -197,7 +193,9 @@ class FlutterClawTaskHandler extends TaskHandler {
             if (isDone) {
               return;
             }
-            overlayService.show(formatFriendlyToolStatus(toolName, args)).catchError((_) {});
+            overlayService
+                .show(formatFriendlyToolStatus(toolName, args))
+                .catchError((_) {});
           },
         );
 
@@ -222,7 +220,9 @@ class FlutterClawTaskHandler extends TaskHandler {
         _lastError = errorMsg;
 
         if (attempt == maxAttempts) {
-          return _GatewayResult.failure('Port ${_configManager?.config.gateway.port ?? 18789} in use or network error');
+          return _GatewayResult.failure(
+            'Port ${_configManager?.config.gateway.port ?? 18789} in use or network error',
+          );
         }
       } catch (e, st) {
         final errorMsg = e.toString();
@@ -230,7 +230,11 @@ class FlutterClawTaskHandler extends TaskHandler {
         _lastError = errorMsg;
 
         if (attempt == maxAttempts) {
-          return _GatewayResult.failure(errorMsg.length > 100 ? '${errorMsg.substring(0, 100)}...' : errorMsg);
+          return _GatewayResult.failure(
+            errorMsg.length > 100
+                ? '${errorMsg.substring(0, 100)}...'
+                : errorMsg,
+          );
         }
       }
     }
@@ -238,8 +242,9 @@ class FlutterClawTaskHandler extends TaskHandler {
     return _GatewayResult.failure('Failed after $maxAttempts attempts');
   }
 
-  static const MethodChannel _notificationUpdateChannel =
-      MethodChannel('ai.flutterclaw/notification_update');
+  static const MethodChannel _notificationUpdateChannel = MethodChannel(
+    'ai.flutterclaw/notification_update',
+  );
 
   /// Asks the native side to update the foreground notification (title + text).
   /// On Android the task runs in a separate FlutterEngine; we use a dedicated
@@ -273,13 +278,15 @@ class FlutterClawTaskHandler extends TaskHandler {
         : 0;
     final tokensProcessed = _gatewayServer != null
         ? _gatewayServer.sessionManager.listSessions().fold<int>(
-            0, (int sum, SessionMeta s) => sum + s.totalTokens)
+            0,
+            (int sum, SessionMeta s) => sum + s.totalTokens,
+          )
         : 0;
     final title = _gatewayState == 'running'
         ? 'Gateway active'
         : _gatewayState == 'error'
-            ? 'Gateway error'
-            : 'Gateway stopped';
+        ? 'Gateway error'
+        : 'Gateway stopped';
     final text = _buildNotificationText(
       sessionCount: sessionCount,
       tokensProcessed: tokensProcessed,
@@ -293,10 +300,7 @@ class FlutterClawTaskHandler extends TaskHandler {
   /// On Android, BigTextStyle expands multi-line text. When running, includes
   /// active channels, automation rules, and action center unread counts
   /// read directly from workspace JSON files.
-  String _buildNotificationText({
-    int? sessionCount,
-    int? tokensProcessed,
-  }) {
+  String _buildNotificationText({int? sessionCount, int? tokensProcessed}) {
     final uptime = _startedAt != null
         ? DateTime.now().difference(_startedAt!).inSeconds
         : 0;
@@ -305,11 +309,14 @@ class FlutterClawTaskHandler extends TaskHandler {
 
     switch (_gatewayState) {
       case 'running':
-        final line1 = '\u25CF $modelLabel  \u00B7  $addr  \u00B7  ${_formatUptime(uptime)}';
+        final line1 =
+            '\u25CF $modelLabel  \u00B7  $addr  \u00B7  ${_formatUptime(uptime)}';
         final lines = <String>[line1];
 
         if (sessionCount != null && tokensProcessed != null) {
-          final sessionsStr = sessionCount == 1 ? '1 chat' : '$sessionCount chats';
+          final sessionsStr = sessionCount == 1
+              ? '1 chat'
+              : '$sessionCount chats';
           final tokensStr = _formatTokens(tokensProcessed);
           lines.add('$sessionsStr  \u00B7  $tokensStr tokens');
         }
@@ -436,7 +443,7 @@ class FlutterClawTaskHandler extends TaskHandler {
         );
       } else {
         _consecutiveFailures++;
-        _log.warning('Gateway health check failed (${_consecutiveFailures}/3)');
+        _log.warning('Gateway health check failed ($_consecutiveFailures/3)');
 
         if (_consecutiveFailures >= 3 && !_isRetrying) {
           _log.severe('Gateway unhealthy after 3 checks, attempting restart');

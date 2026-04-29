@@ -118,7 +118,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                                   fontSize: 15,
                                 ),
                               )
-                            : _buildAssistantText(context, theme, colors),
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildAssistantText(context, theme, colors),
+                                  if (!widget.message.isStreaming && widget.message.usage != null) ...[
+                                    const SizedBox(height: 8),
+                                    _buildTokenUsage(context, colors, widget.message.usage!),
+                                  ],
+                                ],
+                              ),
                   ),
                 ),
                 // TTS speaking indicator — shown while this message is being read
@@ -305,6 +314,40 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     s = s.replaceAll(RegExp(r'\n{2,}'), '. ');
     s = s.replaceAll('\n', ' ');
     return s.trim();
+  }
+  
+  Widget _buildTokenUsage(BuildContext context, ColorScheme colors, dynamic usage) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colors.onSurface.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: colors.onSurface.withOpacity(0.1),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.generating_tokens_outlined,
+            size: 10,
+            color: colors.onSurface.withOpacity(0.4),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${usage.promptTokens}p + ${usage.completionTokens}c = ${usage.totalTokens} tokens',
+            style: TextStyle(
+              fontSize: 10,
+              color: colors.onSurface.withOpacity(0.4),
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAssistantText(BuildContext context, ThemeData theme, ColorScheme colors) {
