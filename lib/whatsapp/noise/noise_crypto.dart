@@ -2,7 +2,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart' as crypto;
-import 'package:flutter_curve25519/flutter_curve25519.dart';
 import 'package:pointycastle/export.dart' as pc;
 
 /// Crypto primitives for the Noise Protocol and general WhatsApp crypto.
@@ -106,7 +105,7 @@ Future<Uint8List> ed25519Sign(Uint8List privateKey, Uint8List message) async {
 /// Curve25519 (Signal) sign.
 Future<Uint8List> curve25519Sign(
     Uint8List privateKey, Uint8List message) async {
-  return Curve25519.sign(privateKey, message, Uint8List(0));
+  return ed25519Sign(privateKey, message);
 }
 
 /// Generate cryptographically random bytes.
@@ -128,7 +127,7 @@ Future<bool> ed25519Verify(
 /// Curve25519 (Signal) verify.
 Future<bool> curve25519Verify(
     Uint8List publicKey, Uint8List message, Uint8List signature) async {
-  return Curve25519.verify(publicKey, message, signature) == 1;
+  return ed25519Verify(publicKey, message, signature);
 }
 
 /// AES-256-CBC encrypt with PKCS7 padding.

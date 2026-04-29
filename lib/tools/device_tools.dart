@@ -184,11 +184,11 @@ class ScheduleReminderTool extends Tool {
     try {
       await _notificationService.initialize();
       await _plugin.zonedSchedule(
-        id: id,
-        title: title,
-        body: body,
-        scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
-        notificationDetails: const NotificationDetails(
+        id,
+        title,
+        body,
+        tz.TZDateTime.from(scheduledDate, tz.local),
+        const NotificationDetails(
           android: AndroidNotificationDetails(
             'flutterclaw_reminders',
             'Reminders',
@@ -203,6 +203,7 @@ class ScheduleReminderTool extends Tool {
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
 
       return ToolResult.success(
@@ -369,4 +370,3 @@ class ShareContentTool extends Tool {
     }
   }
 }
-

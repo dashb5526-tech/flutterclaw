@@ -318,11 +318,8 @@ class AgentLoop {
 
     // Gesture navigation awareness
     buf.writeln('## Navigation');
-    if (sdkInt >= 29) {
-      // Android 10+
-      buf.writeln(
-        'Android $androidVer likely uses **gesture navigation** (no visible nav buttons):',
-      );
+    if (sdkInt >= 29) { // Android 10+
+      buf.writeln('Android $androidVer likely uses **gesture navigation** (no visible nav buttons):');
       buf.writeln('- Back: swipe from left or right edge toward center.');
       buf.writeln('- Home: swipe up from bottom edge.');
       buf.writeln('- Recents: swipe up from bottom and hold.');

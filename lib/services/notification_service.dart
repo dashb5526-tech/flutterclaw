@@ -72,7 +72,7 @@ class NotificationService {
 
     try {
       final result = await _plugin.initialize(
-        settings: initSettings,
+        initSettings,
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
@@ -147,10 +147,10 @@ class NotificationService {
     if (!_initialized) return;
 
     await _plugin.show(
-      id: NotificationIds.persistent,
-      title: title,
-      body: body,
-      notificationDetails: NotificationDetails(
+      NotificationIds.persistent,
+      title,
+      body,
+      const NotificationDetails(
         android: AndroidNotificationDetails(
           NotificationChannels.persistent,
           'FlutterClaw Service',
@@ -186,11 +186,10 @@ class NotificationService {
     final id = NotificationIds.messageBase + channel.hashCode.abs() % 1000;
 
     await _plugin.show(
-      id: id,
-      title: sender,
-      body: text,
-      payload: payload,
-      notificationDetails: const NotificationDetails(
+      id,
+      sender,
+      text,
+      const NotificationDetails(
         android: AndroidNotificationDetails(
           NotificationChannels.messages,
           'Messages',
@@ -206,6 +205,7 @@ class NotificationService {
           presentSound: true,
         ),
       ),
+      payload: payload,
     );
   }
 
@@ -215,10 +215,10 @@ class NotificationService {
   Future<void> showToolStatusNotification(String agentName, String toolLabel) async {
     if (!_initialized) return;
     await _plugin.show(
-      id: NotificationIds.toolStatus,
-      title: agentName,
-      body: toolLabel,
-      notificationDetails: const NotificationDetails(
+      NotificationIds.toolStatus,
+      agentName,
+      toolLabel,
+      const NotificationDetails(
         android: AndroidNotificationDetails(
           NotificationChannels.messages,
           'Messages',
@@ -242,7 +242,7 @@ class NotificationService {
   /// Cancel a notification by ID.
   Future<void> cancelNotification(int id) async {
     if (!_initialized) return;
-    await _plugin.cancel(id: id);
+    await _plugin.cancel(id);
   }
 
   /// Ensures the app can show notifications on Android (API 33+).
